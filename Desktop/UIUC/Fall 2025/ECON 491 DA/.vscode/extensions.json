@@ -1,0 +1,52 @@
+{
+    "recommendations": [
+        // R Language Support
+        "REditorSupport.r",
+        "REditorSupport.r-lsp",
+        "REditorSupport.r-debugger",
+        "REditorSupport.r-pack",
+        
+        // Markdown Support
+        "yzhang.markdown-all-in-one",
+        "DavidAnson.vscode-markdownlint",
+        "bierner.markdown-emoji",
+        "bierner.markdown-preview-github-styles",
+        "bierner.markdown-checkbox",
+        "bierner.markdown-mermaid",
+        
+        // R Markdown Specific
+        "REditorSupport.r-markdown",
+        "REditorSupport.r-markdown-lsp",
+        
+        // Data Science and Visualization
+        "ms-python.python",
+        "ms-toolsai.jupyter",
+        "ms-toolsai.jupyter-keymap",
+        "ms-toolsai.jupyter-renderers",
+        
+        // Git and Version Control
+        "eamodio.gitlens",
+        "mhutchie.git-graph",
+        
+        // File Management
+        "ms-vscode.vscode-json",
+        "bradlc.vscode-tailwindcss",
+        
+        // Productivity
+        "ms-vscode.vscode-typescript-next",
+        "esbenp.prettier-vscode",
+        "ms-vscode.vscode-eslint",
+        
+        // R Package Management
+        "REditorSupport.renv",
+        
+        // Code Quality
+        "streetsidesoftware.code-spell-checker",
+        "ms-vscode.vscode-json",
+        
+        // Themes and Icons
+        "PKief.material-icon-theme",
+        "zhuangtongfa.Material-theme",
+        "Equinusocio.vsc-material-theme"
+    ]
+}

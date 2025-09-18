@@ -1,0 +1,98 @@
+{
+    // R and R Markdown specific settings
+    "files.associations": {
+        "*.R": "r",
+        "*.r": "r",
+        "*.Rmd": "markdown",
+        "*.rmd": "markdown",
+        "*.Rproj": "r"
+    },
+    
+    // R language server settings
+    "r.lsp.enabled": true,
+    "r.lsp.diagnostics": true,
+    "r.lsp.completion": true,
+    "r.lsp.hover": true,
+    "r.lsp.signatureHelp": true,
+    "r.lsp.definition": true,
+    "r.lsp.references": true,
+    "r.lsp.implementation": true,
+    "r.lsp.typeDefinition": true,
+    "r.lsp.documentSymbol": true,
+    "r.lsp.workspaceSymbol": true,
+    "r.lsp.codeAction": true,
+    "r.lsp.codeLens": true,
+    "r.lsp.documentFormatting": true,
+    "r.lsp.documentRangeFormatting": true,
+    "r.lsp.documentOnTypeFormatting": true,
+    "r.lsp.rename": true,
+    "r.lsp.foldingRange": true,
+    "r.lsp.selectionRange": true,
+    "r.lsp.linkedEditingRange": true,
+    "r.lsp.callHierarchy": true,
+    "r.lsp.semanticTokens": true,
+    "r.lsp.moniker": true,
+    
+    // R Markdown specific settings
+    "markdown.preview.breaks": true,
+    "markdown.preview.fontSize": 14,
+    "markdown.preview.lineHeight": 1.6,
+    "markdown.preview.scrollPreviewWithEditor": true,
+    "markdown.preview.scrollEditorWithPreview": true,
+    
+    // R chunk settings
+    "r.markdown.knit.auto": false,
+    "r.markdown.knit.onSave": false,
+    "r.markdown.knit.outputDir": ".",
+    "r.markdown.knit.outputFormat": "html_document",
+    
+    // File watching and auto-save
+    "files.autoSave": "afterDelay",
+    "files.autoSaveDelay": 1000,
+    "files.watcherExclude": {
+        "**/target": true,
+        "**/node_modules": true,
+        "**/venv": true,
+        "**/.Rhistory": true,
+        "**/.RData": true
+    },
+    
+    // Editor settings for R
+    "editor.tabSize": 2,
+    "editor.insertSpaces": true,
+    "editor.detectIndentation": true,
+    "editor.rulers": [80, 100],
+    "editor.wordWrap": "bounded",
+    "editor.wordWrapColumn": 100,
+    
+    // Terminal settings
+    "terminal.integrated.defaultProfile.osx": "zsh",
+    "terminal.integrated.cwd": "${workspaceFolder}",
+    
+    // Language-specific formatting
+    "[r]": {
+        "editor.defaultFormatter": "REditorSupport.r",
+        "editor.formatOnSave": true,
+        "editor.formatOnPaste": true
+    },
+    "[markdown]": {
+        "editor.defaultFormatter": "yzhang.markdown-all-in-one",
+        "editor.formatOnSave": true,
+        "editor.wordWrap": "on"
+    },
+    
+    // R session settings
+    "r.sessionWatcher": true,
+    "r.bracketedPaste": true,
+    "r.alwaysUseActiveTerminal": true,
+    "r.terminalPath": "/usr/local/bin/R",
+    
+    // R package management
+    "r.package.manager": "renv",
+    "r.renv.activate": true,
+    
+    // R Markdown knitting
+    "r.markdown.knit.engine": "knitr",
+    "r.markdown.knit.clean": true,
+    "r.markdown.knit.encoding": "UTF-8"
+}
