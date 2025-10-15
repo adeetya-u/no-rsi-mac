@@ -1,0 +1,86 @@
+---
+title: "Constructing Prices - Category"
+format: html
+editor: visual
+---
+
+## Packages
+
+For this first document, the following packages will be used:
+
+```{r}
+#| warning: false
+#| message: false
+
+library(tidyverse)
+library(magrittr)
+library(gridExtra)
+
+```
+
+The `tidyverse` is a collection of R packages to read, visualize and manipulate data. `magrittr` is loaded for the `%<>%` operator. The package `gridExtra` allows us to easily exhibit multiple ggplots.
+
+## Loading the data
+
+```{r}
+#| warning: false
+#| message: false
+
+
+prices<-read_csv("sell_prices.csv")
+head(prices)
+
+w<-read_csv("weights_validation.csv") 
+head(w) 
+
+```
+
+Combinations of `item_id`, `dept_id`, `cat_id`, `store_id` and `state_id` provide the multiple hierarchical levels of interest of the forecasting competitions.
+
+Attention: this code is for CATEGORY aggregate level. It needs to be adapted to other levels.
+
+## Prices
+
+We begin by aggregating the product/week prices across all stores as in the last script:
+
+```{r}
+#| warning: false 
+#| message: false  
+
+prices$cat_id<-unlist(str_split(prices$item_id, "_", 2, simplify = T), recursive = F)[,1]
+
+w %<>% filter(Level_id == "Level12") %>%
+  select(item_id = Agg_Level_1, store_id = Agg_Level_2, dollar_sales = Dollar_Sales)
+
+prices %<>% left_join(w, by = c("item_id", "store_id"))
+prices %<>% group_by(cat_id, item_id, wm_yr_wk) %>%
+  summarise(sell_price = weighted.mean(sell_price, dollar_sales),
+            dollar_sales = sum(dollar_sales)) %>%
+  ungroup()
+prices$sell_price[prices$dollar_sales == 0]<-0
+
+head(prices)
+```
+
+```{r}
+#| warning: false 
+#| message: false 
+#| echo: false  
+
+rm(w) 
+```
+
+Below we create the weighted mean of weekly prices for each `cat_id`. Choose cat
+
+```{r}
+#| warning: false 
+#| message: false  
+
+# Summarizing 
+prices %<>% group_by(cat_id, wm_yr_wk) %>%   
+  summarise(price_wmean = weighted.mean(sell_price, dollar_sales),   
+            price_median = median(sell_price)) %>%   
+ungroup()  
+
+head(prices) 
+```

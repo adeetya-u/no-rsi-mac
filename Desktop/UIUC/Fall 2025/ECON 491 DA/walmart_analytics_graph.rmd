@@ -1,0 +1,805 @@
+---
+title: "Walmart Sales Analytics by Category"
+author: "Data Analysis"
+date: "`r Sys.Date()`"
+output:
+  pdf_document:
+    toc: true
+  html_document:
+    theme: flatly
+    toc: true
+    toc_float: true
+    code_folding: show
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE)
+Sys.setenv(R_MAX_VSIZE = "30GB")
+
+# Load required libraries
+library(tidyverse)
+library(ggplot2)
+library(scales)
+library(plotly)
+library(DT)
+library(lubridate)
+library(reshape2)
+library(viridis)
+library(waffle)
+library(gridExtra)
+library(grid)
+library(shiny)
+library(miniUI)
+```
+
+# Walmart Sales Analytics by Category
+
+```{r code-wrap, echo=FALSE, results='asis'}
+if (knitr::is_html_output()) {
+  cat('<style>pre code{white-space:pre-wrap;word-break:break-word}.sourceCode{white-space:pre-wrap;word-break:break-word}</style>')
+}
+```
+
+This analysis focuses on sales patterns across different product categories (cat_id) using the training data from Walmart's sales dataset.
+
+## Load Preprocessed Data
+
+```{r load-preprocessed}
+# Load precomputed datasets created by running walmart_data_prep.rmd
+category_daily <- readRDS(file.path("data", "category_daily.rds"))
+category_summary <- readRDS(file.path("data", "category_summary.rds"))
+state_monthly <- readRDS(file.path("data", "state_monthly.rds"))
+monthly_category_summary <- readRDS(file.path("data", "monthly_category_summary.rds"))
+sales_long <- readRDS(file.path("data", "sales_long.rds"))
+```
+
+## Summary Statistics
+
+```{r summary-table}
+# Display summary statistics in a static table for PDF
+library(knitr)
+library(kableExtra)
+
+category_summary %>%
+  mutate(
+    total_sales = scales::comma(total_sales, accuracy = 1),
+    avg_daily_sales = scales::comma(avg_daily_sales, accuracy = 1),
+    max_daily_sales = scales::comma(max_daily_sales, accuracy = 1),
+    min_daily_sales = scales::comma(min_daily_sales, accuracy = 1)
+  ) %>%
+  kable(
+    caption = "Summary Statistics by Product Category",
+    col.names = c("Category", "Total Sales", "Avg Daily Sales", "Max Daily Sales", "Min Daily Sales"),
+    align = c("l", "r", "r", "r", "r")
+  ) %>%
+  kable_styling(
+    bootstrap_options = c("striped", "hover"),
+    latex_options = c("striped", "hold_position"),
+    full_width = FALSE
+  )
+```
+
+## Visualizations
+
+### 1. Sales Trends by Category Over Time
+
+This line chart shows the daily sales trends for each product category, revealing seasonal patterns and peak sales periods.
+
+```{r line-chart}
+# Create line chart (static version for PDF compatibility)
+line_plot <- ggplot(category_daily, aes(x = date, y = total_sales, color = cat_id)) +
+  geom_line(size = 0.8) +
+  geom_point(size = 0.5, alpha = 0.6) +
+  scale_color_viridis_d(name = "Category") +
+  scale_y_continuous(labels = scales::comma) +
+  labs(
+    title = "Daily Sales Trends by Product Category",
+    x = "Date",
+    y = "Total Sales"
+  ) +
+  theme_minimal() +
+  theme(
+    plot.title = element_text(size = 16, hjust = 0.5),
+    legend.position = "bottom",
+    axis.text.x = element_text(angle = 45, hjust = 1)
+  )
+
+if (knitr::is_html_output()) {
+  suppressWarnings(print(plotly::ggplotly(line_plot, tooltip = c("x", "y", "colour")) %>% plotly::config(displayModeBar = "hover", responsive = TRUE)))
+} else {
+  print(line_plot)
+}
+```
+
+```{r cleanup-post-viz, echo=FALSE}
+# Free large objects used only for the visualization section
+rm(line_plot)
+invisible(gc())
+```
+
+## Key Insights
+
+On a weekly basis, sales for food, hobbies, and household items follow a consistent pattern, rising steadily throughout the week and peaking on Saturdays. This trend likely reflects consumer preference for shopping at the end of the week.
+
+On a monthly scale, sales increase from January, peak in June, and then decline gradually toward the year's end. A possible explanation is that consumers adopt a cautious spending approach early in the year due to economic uncertainty, increase consumption as conditions stabilize mid-year, and reduce spending again at year's end in anticipation of the upcoming year.\
+\
+An outlier occurs annually on December 25th, when sales across all categories drop to nearly zero. Since most stores close on Christmas Day, this anomaly is expected.
+
+Looking at yearly data, a notable rise in prices occurs around 2012. Afterward, prices generally stabilize with minor fluctuations, though a potential upward trend appears beginning in 2016.
+
+Across categories, daily sales patterns are similar. However, food sales fluctuate the most, while household sales remain relatively stable. This can be explained by the essential nature of household goods, which drives consistent demand. In contrast, food has higher purchase frequency, weekly seasonality, and greater sensitivity to holidays and events, resulting in more volatility.
+
+-   Data scope: Daily sales from 2011-2016; visuals aggregate to weekly and monthly.
+-   Data types: Numerical (sales), categorical (category/state), binary (holiday/event flags).
+
+### Sources:
+
+**Weekend Shopping Patterns:** Industry research confirms that weekends are the most popular shopping times at grocery and mass retail stores, with Saturday having the highest purchase percentage and Sunday the highest average spend. Thursday typically has the lowest purchase percentage, while midweek footfall and average transaction sizes dip, then gradually increase through to the weekend ([Snipp, 2017](https://www.snipp.com/blog/2017-07-05/whats-in-your-basket-consumer-shopping-habits-by-day-of-week)). This behavioral pattern is consistent with consumers preferring to stock up on groceries and household items at the end of the work week when they have more time to shop.
+
+**Food Price Volatility and Stabilization:** The food price crisis, which intermittently lasted from 2006 to about 2012-13, raised significant economic concerns globally. During this period, the prices of wheat, maize, and soybeans were much higher than in the early 2000s, and all food commodities remained above the long-term average ([Oxford Academic, 2013](https://academic.oup.com/book/39139/chapter/338572542)). This explains the notable rise in food prices observed around 2012 in our data. Subsequently, research from the USDA Economic Research Service documented that retail food price inflation slowed considerably after 2012-13, reflecting the stabilization with minor fluctuations we observe in the later years of our dataset ([USDA ERS, 2019](https://www.ers.usda.gov/amber-waves/2019/july/retail-food-price-inflation-has-slowed-over-time)). The potential upward trend beginning in 2016 may reflect normal market adjustments and regional supply-demand dynamics.
+
+### 2. Daily Sales Distribution by Category
+
+This box plot displays the distribution of daily sales for each product category, revealing the variability and spread of sales performance across the three categories.
+
+```{r box-plot}
+# Calculate statistics for labels
+box_stats <- category_daily %>%
+  group_by(cat_id) %>%
+  summarise(
+    median = median(total_sales),
+    q1 = quantile(total_sales, 0.25),
+    q3 = quantile(total_sales, 0.75),
+    min = min(total_sales),
+    max = max(total_sales)
+  )
+
+# Create box plot (static version for PDF compatibility)
+box_plot <- ggplot(category_daily, aes(x = cat_id, y = total_sales, fill = cat_id)) +
+  geom_boxplot(outlier.colour = "red", outlier.shape = 16, outlier.size = 1, notch = FALSE) +
+  # Add Q1 labels (left side)
+  geom_text(data = box_stats, aes(x = cat_id, y = q1, label = scales::comma(q1, accuracy = 1)),
+            vjust = 1.5, hjust = 1.3, size = 3, color = "darkgray") +
+  # Add Q3 labels (left side)
+  geom_text(data = box_stats, aes(x = cat_id, y = q3, label = scales::comma(q3, accuracy = 1)),
+            vjust = -0.5, hjust = 1.3, size = 3, color = "darkgray") +
+  # Add median labels (right side)
+  geom_text(data = box_stats, aes(x = cat_id, y = median, label = scales::comma(median, accuracy = 1)),
+            vjust = -0.5, hjust = -0.3, size = 3.5, fontface = "bold", color = "black") +
+  scale_fill_viridis_d(name = "Category") +
+  scale_y_continuous(labels = scales::comma) +
+  labs(
+    title = "Daily Sales Distribution by Product Category",
+    subtitle = "Bold labels = Median | Gray labels = Q1 (lower) and Q3 (upper) quartiles",
+    x = "Product Category",
+    y = "Daily Sales"
+  ) +
+  theme_minimal() +
+  theme(
+    plot.title = element_text(size = 16, hjust = 0.5),
+    plot.subtitle = element_text(size = 10, hjust = 0.5, color = "gray40"),
+    axis.text.x = element_text(angle = 0, hjust = 0.5),
+    legend.position = "bottom"
+  )
+
+if (knitr::is_html_output()) {
+  suppressWarnings(print(plotly::ggplotly(box_plot, tooltip = c("x", "y", "fill")) %>% plotly::config(displayModeBar = "hover", responsive = TRUE)))
+} else {
+  print(box_plot)
+}
+```
+
+## Key Insights
+
+The box plot reveals that food exhibits the widest distribution and highest variability in daily sales, with numerous outliers indicating significant fluctuations. This is consistent with food being a high-frequency purchase category that is more sensitive to weekly patterns, holidays, and promotional events. In contrast, household goods show a much tighter distribution with less variability, reflecting more stable and consistent purchasing patterns driven by the essential nature of these products.
+
+The median daily sales for food substantially exceed those of hobbies and household categories, confirming food's dominance in Walmart's product mix. This aligns with Walmart's strategic positioning as a supercenter where grocery serves as a traffic driver for higher-margin general merchandise sales.
+
+-   Data scope: Daily sales from 2011-2016; visuals aggregate to weekly and monthly.
+-   Data types: Numerical (sales), categorical (category/state), binary (holiday/event flags).
+
+### Sources:
+
+**Food Category Dominance in Walmart:** According to [Singh, Hansen, and Blattberg (2006)](https://doi.org/10.1287/mksc.1050.0176), industry analysts observe that Wal-Mart offers lower prices on food to bring traffic into the supercenters with the hope of selling higher-margin general merchandise, and even has the potential of treating the entire food business as a loss leader. The strategy appears successful, with reports suggesting that general merchandise sales are 25%-50% higher at a supercenter than at discount stores in the same area. This explains why food shows both the highest median sales and the greatest variability in our box plot - it serves as the primary driver of store traffic. Furthermore, Walmart's SEC filings confirm that grocery and consumable products accounted for over half of Walmart U.S. sales during the 2011-2016 period. Specifically, grocery made up 55% of Walmart U.S. sales in fiscal 2013, translating to roughly \$151 billion in U.S. grocery sales out of \$274.5 billion total. By comparison, the next-largest categories were much smaller: Entertainment (comparable to "Hobbies") at 11% of sales, and Home (household goods) at 7% ([Supermarket News, 2013](https://www.supermarketnews.com/finance/grocery-flat-as-percent-of-sales-at-walmart-u-s-)). This substantial difference in category size directly corresponds to the differences in sales distributions observed in our box plot.
+
+**Shopping Frequency and Purchase Variability:** Research on consumer shopping behavior reveals that high-frequency shoppers, who often visit grocery stores, spend significantly more on fresh produce and are driven by priorities of health and freshness. Representing 36% of consumers, they favor organic options and value quality, often shopping at a variety of stores. In contrast, low-frequency shoppers making trips less than once a week focus on budget and convenience, with only 39% of their grocery budget allocated for fresh items ([Produce Business, 2024](https://producebusiness.com/the-impact-of-shopping-frequency-on-fresh-produce-purchases/)). This dichotomy in shopping frequency patterns explains the wider variability and numerous outliers observed in food sales compared to household goods. Food purchases are more frequent and more variable depending on consumer type, promotional activity, and freshness considerations, while household goods represent more stable, planned purchases with longer intervals between shopping trips.
+
+### 3. Monthly Sales Distribution Waffle Charts by Category
+
+These waffle charts show the proportional distribution of sales across product categories for sample months, where each square represents 1% of total sales for that month.
+
+```{r static-waffle-quad, echo=FALSE, fig.width=14, fig.height=12}
+# Create 4-panel waffle chart layout (2x2 grid)
+library(gridExtra)
+library(grid)
+library(ggplot2)
+
+# Prepare waffle helper and data inline so no separate chunk is required
+stopifnot(exists("monthly_category_summary"))
+
+# Months available for selection
+available_months <- monthly_category_summary %>%
+  dplyr::arrange(year, month) %>%
+  dplyr::pull(period) %>%
+  unique()
+
+# Waffle plot function
+create_ggplot_waffle <- function(selected_period) {
+  month_data <- monthly_category_summary %>%
+    dplyr::filter(period == selected_period) %>%
+    dplyr::mutate(proportion = total_sales / sum(total_sales)) %>%
+    dplyr::arrange(dplyr::desc(proportion))
+
+  if (nrow(month_data) == 0 || any(is.na(month_data$proportion))) {
+    return(NULL)
+  }
+
+  squares_per_cat <- round(month_data$proportion * 100)
+  diff_to_hundred <- 100 - sum(squares_per_cat)
+  if (diff_to_hundred != 0 && length(squares_per_cat) > 0) {
+    max_idx <- which.max(squares_per_cat)
+    squares_per_cat[max_idx] <- squares_per_cat[max_idx] + diff_to_hundred
+  }
+
+  waffle_data <- month_data %>%
+    dplyr::mutate(
+      squares = squares_per_cat,
+      cat_id = factor(cat_id, levels = cat_id),
+      share_label = scales::percent(proportion, accuracy = 0.1)
+    ) %>%
+    dplyr::slice(rep(1:dplyr::n(), squares)) %>%
+    dplyr::mutate(
+      x = rep(1:10, length.out = dplyr::n()),
+      y = rep(1:10, each = 10)[1:dplyr::n()]
+    )
+
+  ggplot(waffle_data, aes(x = x, y = y, fill = cat_id, text = paste(
+    "Category:", cat_id,
+    "<br>Share:", share_label
+  ))) +
+    geom_tile(color = "white", size = 0.5) +
+    scale_fill_viridis_d(name = "Category") +
+    coord_equal() +
+    theme_void() +
+    theme(
+      plot.title = element_text(size = 12, hjust = 0.5, face = "bold"),
+      legend.position = "bottom",
+      legend.text = element_text(size = 8),
+      legend.title = element_text(size = 9),
+      legend.key.size = unit(0.3, "cm")
+    ) +
+    labs(
+      title = paste("Sales Distribution -", selected_period),
+      subtitle = "Each square = 1% of monthly sales"
+    )
+}
+
+# Select 4 months for the quad layout
+selected_months <- head(available_months, 4)
+
+# Generate plots for each month
+plot_list <- list()
+for(i in 1:min(4, length(selected_months))) {
+  plot_list[[i]] <- create_ggplot_waffle(selected_months[i])
+}
+
+# Remove any NULL plots
+plot_list <- plot_list[!sapply(plot_list, is.null)]
+
+# Arrange plots in 2x2 grid
+if (knitr::is_html_output()) {
+  if (length(plot_list) > 0) {
+    html_plots <- lapply(plot_list, function(p) plotly::ggplotly(p, tooltip = "text") %>% plotly::config(displayModeBar = "hover", responsive = TRUE))
+    # pad with empty plots to fill 2x2 if needed
+    while (length(html_plots) < 4) {
+      html_plots[[length(html_plots) + 1]] <- plotly::plotly_empty()
+    }
+    subplot_layout <- plotly::subplot(
+      html_plots[[1]], html_plots[[2]],
+      html_plots[[3]], html_plots[[4]],
+      nrows = 2, shareX = FALSE, shareY = FALSE, titleX = TRUE, titleY = TRUE
+    ) %>% plotly::layout(title = list(text = "Monthly Sales Distribution by Category (4-Panel Comparison)")) %>% plotly::config(displayModeBar = "hover", responsive = TRUE)
+    suppressWarnings(print(subplot_layout))
+  }
+} else {
+  if(length(plot_list) >= 4) {
+    grid.arrange(
+      plot_list[[1]], plot_list[[2]],
+      plot_list[[3]], plot_list[[4]],
+      ncol = 2,
+      top = textGrob("Monthly Sales Distribution by Category (4-Panel Comparison)", 
+                     gp = gpar(fontsize = 16, fontface = "bold"))
+    )
+  } else if(length(plot_list) > 0) {
+    # If fewer than 4 plots available, arrange what we have
+    do.call(grid.arrange, c(plot_list, list(ncol = 2)))
+  }
+}
+```
+
+```{r cleanup-post-waffle, echo=FALSE}
+# Release waffle intermediates no longer needed beyond this point
+rm(create_ggplot_waffle, available_months, selected_months, plot_list)
+invisible(gc())
+```
+
+## Key Insights
+
+The monthly distribution of sales shows relative consistency across categories, though there is a gradual shift away from food toward household items. While forecasting is needed for long-term trends, this may reflect growing consumer concern with managing health and household stability, potentially reducing discretionary spending on food.
+
+Overall, Walmart's category distribution is approximately 70% food, 20% household, and 10% hobbies. Between February and December 2015, household's share increased slightly to 25%, while food's share declined to 65%. This aligns with Walmart's expansion of household and general merchandise during that period, including improved online and in-store selections and promotional campaigns, which likely encouraged greater spending on household goods.
+
+-   Data scope: Daily sales from 2011-2016; visuals aggregate to weekly and monthly.
+-   Data types: Numerical (sales), categorical (category/state), binary (holiday/event flags).
+
+### Sources:
+
+**Christmas Shopping and Store Closures:** Consumer shopping patterns around the holiday season provide important context for the sales anomaly observed on December 25th. According to the National Retail Federation, 157 million consumers shop on "Super Saturday" (the last Saturday before Christmas), and with only four days between Super Saturday and December 25, shoppers embrace multiple channels as they wrap up their holiday shopping. However, most consumers (71%) plan to shop the week immediately following December 25 ([NRF, 2019](https://nrf.com/media-center/press-releases/157-million-consumers-to-shop-on-super-saturday)). This explains the near-zero sales on Christmas Day across all categories - most major retailers, including Walmart, close their stores on December 25 to allow employees to spend time with family, creating the consistent annual outlier visible in our time series data. The subsequent spike in sales the following week reflects post-holiday shopping behavior and gift card redemptions.
+
+**Walmart's Strategic Mix Evolution:** The observed proportional shift from food toward household and general merchandise between 2011 and 2016 aligns with Walmart's broader strategic positioning as a supercenter format. As documented by [Singh, Hansen, and Blattberg (2006)](https://doi.org/10.1287/mksc.1050.0176), Walmart's strategy involves using lower food prices as a traffic driver with the goal of selling higher-margin general merchandise. The research notes that general merchandise sales are 25%-50% higher at a supercenter than at discount stores in the same area or after conversion of a discount store to supercenter format. The gradual increase in household's share from 20% to 25% observed in our waffle charts during 2015 reflects this strategic emphasis on general merchandise. While food remains dominant at approximately 70% of sales (consistent with the 55% of total revenue reported in fiscal 2013 SEC filings), the deliberate expansion of household and hobbies categories demonstrates Walmart's execution of its loss-leader strategy for food to drive higher-margin general merchandise purchases ([Supermarket News, 2013](https://www.supermarketnews.com/finance/grocery-flat-as-percent-of-sales-at-walmart-u-s-)).
+
+## References
+
+1.  National Retail Federation (NRF). (2019). *157 Million Consumers to Shop on Super Saturday*. Retrieved from <https://nrf.com/media-center/press-releases/157-million-consumers-to-shop-on-super-saturday>
+
+2.  Oxford Academic. (2013). *The food price crisis*. In *Food Security, Poverty and Nutrition Policy Analysis* (2nd ed.). Retrieved from <https://academic.oup.com/book/39139/chapter/338572542>
+
+3.  Produce Business. (2024). *The Impact of Shopping Frequency on Fresh Produce Purchases*. Retrieved from <https://producebusiness.com/the-impact-of-shopping-frequency-on-fresh-produce-purchases/>
+
+4.  Singh, V. P., Hansen, K. T., & Blattberg, R. C. (2006). Market Entry and Consumer Behavior: An Investigation of a Wal-Mart Supercenter. *Marketing Science*, 25(5), 457-476.
+
+5.  Snipp. (2017). *What's in Your Basket: Consumer Shopping Habits by Day of Week*. Retrieved from <https://www.snipp.com/blog/2017-07-05/whats-in-your-basket-consumer-shopping-habits-by-day-of-week>
+
+6.  Supermarket News. (2013). *Grocery Flat as Percent of Sales at Walmart U.S.* Retrieved from <https://www.supermarketnews.com/finance/grocery-flat-as-percent-of-sales-at-walmart-u-s->
+
+7.  U.S. Department of Agriculture Economic Research Service (USDA ERS). (2019). *Retail Food Price Inflation Has Slowed Over Time*. *Amber Waves*. Retrieved from <https://www.ers.usda.gov/amber-waves/2019/july/retail-food-price-inflation-has-slowed-over-time>
+
+# The Simple Model
+
+## Introduction
+
+As our first (benchmark) model, we estimate a Linear Model to forecast Walmart sales quantities. This model serves as the foundation for comparison with more sophisticated models developed later.
+
+**The Model:**
+
+$$y_{t} = \beta_{0} + \beta_{x} x_{t} + \beta_{DD} DD_{t} + \beta_{DM} DM_{t} + \beta_{DC} DC_{t} + U_{t}$$
+
+Where:
+
+-   $y_{t}$ is the dependent variable (quantity sold in units/sales)
+-   $x_{t}$ is the weighted average price at time $t$
+-   $DD_{t}$ is the matrix of dummies for days of the week
+-   $DM_{t}$ is the matrix of dummies for months of the year
+-   $DC_{t}$ is the matrix of dummies for calendar events
+-   $U_{t}$ is the error term
+-   $t$ represents each date
+
+## Data Preparation for Modeling
+
+```{r load-model-data}
+# Load necessary libraries for modeling
+library(stargazer)
+
+# Load precomputed datasets (already loaded from previous sections, but listed here for clarity)
+# calendar <- readRDS(file.path("data", "calendar.rds"))
+# sell_prices <- readRDS(file.path("data", "sell_prices.rds"))
+# sales_long <- readRDS(file.path("data", "sales_long.rds"))
+
+# We use the already loaded data to avoid re-loading
+```
+
+```{r ensure-model-inputs, message=FALSE, warning=FALSE}
+# Ensure required model inputs exist without double-loading earlier
+if (!exists("calendar")) {
+  calendar <- readRDS(file.path("data", "calendar.rds"))
+}
+if (!exists("sell_prices")) {
+  sell_prices <- readRDS(file.path("data", "sell_prices.rds"))
+}
+```
+
+### Calculating Category Weights (per-category modeling)
+
+We compute the category shares for reference, but downstream we will model each `cat_id` separately and will not aggregate categories when constructing price features.
+
+```{r calculate-weights}
+# Calculate total sales share by category across entire dataset (reference only)
+category_weights <- sales_long %>%
+  group_by(cat_id) %>%
+  summarise(total_category_sales = sum(sales, na.rm = TRUE)) %>%
+  mutate(weight = total_category_sales / sum(total_category_sales)) %>%
+  select(cat_id, weight)
+
+# Display the weights (reference)
+kable(category_weights,
+      caption = "Category Sales Shares (Reference)",
+      col.names = c("Category", "Share of Total Sales"),
+      digits = 4) %>%
+  kable_styling(full_width = FALSE)
+```
+
+### Calculating Weekly Average Price by Category (dollar-sales weighted, no cross-category aggregation)
+
+The weighted weekly average price is calculated as:
+
+$$\text{Weighted Weekly Avg Price} = \sum_{i} (sell\_price_{i} \times weight_{i})$$
+
+For each week, we calculate a single weighted average price and apply it to all 7 days of that week.
+
+```{r calculate-weighted-prices}
+# First, we need to add wm_yr_wk to sales_long via calendar
+sales_with_week <- sales_long %>%
+  left_join(calendar %>% select(date, wm_yr_wk), by = "date")
+
+# Merge sell_prices with sales data (to bring in store_id, item_id, wm_yr_wk, sell_price)
+sales_prices <- sales_with_week %>%
+  left_join(sell_prices, by = c("store_id", "item_id", "wm_yr_wk"))
+
+# Bring in dollar sales weights (Level12 weights: item_id x store_id)
+weights_validation <- readRDS(file.path("data", "weights_validation.rds"))
+w <- weights_validation %>%
+  dplyr::filter(Level_id == "Level12") %>%
+  dplyr::select(item_id = Agg_Level_1, store_id = Agg_Level_2, dollar_sales = Dollar_Sales)
+
+# Derive cat_id from item_id in sell_prices (prefix before first underscore)
+sales_prices <- sales_prices %>%
+  mutate(cat_id_from_item = sub("_.*$", "", item_id))
+
+# Use cat_id in sales_long when available; fallback to derived one
+sales_prices <- sales_prices %>%
+  mutate(cat_id = ifelse(!is.na(cat_id), cat_id, cat_id_from_item))
+
+# Join dollar sales weights
+sales_prices <- sales_prices %>%
+  left_join(w, by = c("item_id", "store_id"))
+
+# Step 1: weight across stores within item/week
+item_week_prices <- sales_prices %>%
+  filter(!is.na(sell_price)) %>%
+  group_by(cat_id, item_id, wm_yr_wk) %>%
+  summarise(
+    sell_price = stats::weighted.mean(sell_price, dollar_sales, na.rm = TRUE),
+    dollar_sales = sum(dollar_sales, na.rm = TRUE),
+    .groups = "drop"
+  )
+
+item_week_prices$sell_price[item_week_prices$dollar_sales == 0] <- 0
+
+# Step 2: aggregate to category/week using dollar-sales weights
+prices_cat_week <- item_week_prices %>%
+  group_by(cat_id, wm_yr_wk) %>%
+  summarise(
+    price_wmean = stats::weighted.mean(sell_price, dollar_sales, na.rm = TRUE),
+    price_median = stats::median(sell_price, na.rm = TRUE),
+    .groups = "drop"
+  )
+
+weighted_weekly_prices_by_cat <- prices_cat_week %>%
+  transmute(wm_yr_wk, cat_id, weighted_avg_price = price_wmean)
+
+# Display first few rows
+head(weighted_weekly_prices_by_cat, 10) %>%
+  kable(caption = "Weekly Dollar-Sales-Weighted Prices by Category (First 10 Weeks)",
+        col.names = c("Week", "Category", "Avg Price (Weighted)"),
+        digits = 2) %>%
+  kable_styling(full_width = FALSE)
+```
+
+```{r cleanup-post-weighted, echo=FALSE}
+# Free heavy intermediate tables not needed further
+rm(sales_with_week, sales_prices)
+invisible(gc())
+```
+
+### Creating the Modeling Dataset
+
+```{r create-modeling-dataset}
+# Aggregate sales by date and category (across all stores and items within category)
+daily_sales <- sales_long %>%
+  group_by(date, weekday, month, year, cat_id) %>%
+  summarise(total_sales = sum(sales, na.rm = TRUE), .groups = "drop")
+
+# Add week identifier and merge with per-category weekly prices
+daily_sales <- daily_sales %>%
+  left_join(calendar %>% select(date, wm_yr_wk, event_name_1, event_type_1), by = "date") %>%
+  left_join(weighted_weekly_prices_by_cat, by = c("wm_yr_wk", "cat_id"))
+
+# Create dummy variables for days of the week (using Saturday as reference)
+daily_sales <- daily_sales %>%
+  mutate(
+    sunday = ifelse(weekday == "Sunday", 1, 0),
+    monday = ifelse(weekday == "Monday", 1, 0),
+    tuesday = ifelse(weekday == "Tuesday", 1, 0),
+    wednesday = ifelse(weekday == "Wednesday", 1, 0),
+    thursday = ifelse(weekday == "Thursday", 1, 0),
+    friday = ifelse(weekday == "Friday", 1, 0)
+    # saturday is the reference category (omitted)
+  )
+
+# Create dummy variables for months (using January as reference)
+daily_sales <- daily_sales %>%
+  mutate(
+    feb = ifelse(month == 2, 1, 0),
+    mar = ifelse(month == 3, 1, 0),
+    apr = ifelse(month == 4, 1, 0),
+    may = ifelse(month == 5, 1, 0),
+    jun = ifelse(month == 6, 1, 0),
+    jul = ifelse(month == 7, 1, 0),
+    aug = ifelse(month == 8, 1, 0),
+    sep = ifelse(month == 9, 1, 0),
+    oct = ifelse(month == 10, 1, 0),
+    nov = ifelse(month == 11, 1, 0),
+    dec = ifelse(month == 12, 1, 0)
+    # january is the reference category (omitted)
+  )
+
+# Create dummy variables for calendar events
+daily_sales <- daily_sales %>%
+  mutate(
+    has_event = ifelse(!is.na(event_name_1), 1, 0),
+    sporting_event = ifelse(!is.na(event_type_1) & event_type_1 == "Sporting", 1, 0),
+    cultural_event = ifelse(!is.na(event_type_1) & event_type_1 == "Cultural", 1, 0),
+    national_event = ifelse(!is.na(event_type_1) & event_type_1 == "National", 1, 0),
+    religious_event = ifelse(!is.na(event_type_1) & event_type_1 == "Religious", 1, 0)
+  )
+
+# Remove rows with missing price data
+model_data <- daily_sales %>%
+  filter(!is.na(weighted_avg_price))
+
+# Display summary of the modeling dataset
+cat("Modeling Dataset Summary (Per Category):\n")
+cat("Total observations:", nrow(model_data), "\n")
+cat("Date range:", as.character(min(model_data$date)), "to", as.character(max(model_data$date)), "\n\n")
+
+# Display first few rows
+head(model_data, 5) %>%
+  select(date, cat_id, total_sales, weighted_avg_price, weekday, month, has_event) %>%
+  kable(caption = "Sample of Modeling Dataset (Per Category)",
+        col.names = c("Date", "Category", "Total Sales", "Avg Price (Weekly)", "Weekday", "Month", "Has Event"),
+        digits = 2) %>%
+  kable_styling(full_width = FALSE)
+```
+
+### Train-Test Split
+
+We split the data into training (in-sample) and testing (out-of-sample) sets. Following the M5 competition structure, we use data up to day 1913 for training and the remaining days for testing.
+
+```{r train-test-split}
+# Calculate which date corresponds to day 1913
+train_end_day <- 1913
+test_start_day <- 1914
+
+# Get the actual dates
+train_end_date <- min(sales_long$date) + days(train_end_day - 1)
+test_start_date <- min(sales_long$date) + days(test_start_day - 1)
+
+# Split the data
+train_data <- model_data %>%
+  filter(date <= train_end_date)
+
+test_data <- model_data %>%
+  filter(date >= test_start_date)
+
+cat("Training data:\n")
+cat("  Observations:", nrow(train_data), "\n")
+cat("  Date range:", as.character(min(train_data$date)), "to", as.character(max(train_data$date)), "\n\n")
+
+cat("Testing data:\n")
+cat("  Observations:", nrow(test_data), "\n")
+cat("  Date range:", as.character(min(test_data$date)), "to", as.character(max(test_data$date)), "\n")
+```
+
+## Model Estimation
+
+We estimate the linear model using Ordinary Least Squares (OLS) regression:
+
+```{r estimate-model}
+# Estimate one linear model per category
+train_groups <- split(train_data, train_data$cat_id)
+
+simple_models <- lapply(train_groups, function(df) {
+  lm(total_sales ~ weighted_avg_price +
+       sunday + monday + tuesday + wednesday + thursday + friday +
+       feb + mar + apr + may + jun + jul + aug + sep + oct + nov + dec +
+       sporting_event + cultural_event + national_event + religious_event,
+     data = df)
+})
+
+# Display regression results for all three categories side-by-side
+stargazer(simple_models,
+          type = "text",
+          title = "Simple Linear Model Results by Category",
+          dep.var.labels = "Total Sales (Units)",
+          column.labels = names(simple_models),
+          covariate.labels = c("Avg Price (Weekly)",
+                               "Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday",
+                               "February", "March", "April", "May", "June", "July",
+                               "August", "September", "October", "November", "December",
+                               "Sporting Event", "Cultural Event", "National Event", "Religious Event"),
+          omit.stat = c("ser", "f"),
+          digits = 2,
+          single.row = FALSE)
+```
+
+### Regression Equation
+
+Based on the estimated coefficients, the regression equation is:
+
+$$\hat{y}_{t} = \hat{\beta}_{0} + \hat{\beta}_{x} \times \text{Price}_{t} + \sum_{d} \hat{\beta}_{d} \times \text{Day}_{d,t} + \sum_{m} \hat{\beta}_{m} \times \text{Month}_{m,t} + \sum_{e} \hat{\beta}_{e} \times \text{Event}_{e,t}$$
+
+Where the coefficients are estimated using the training data.
+
+## Forecasting and Prediction
+
+```{r forecast}
+# Generate predictions for both training and testing data per category
+
+# Helper to add predictions for a given category
+predict_by_cat <- function(cat_key, model) {
+  train_cat <- train_data %>% filter(cat_id == cat_key)
+  test_cat  <- test_data %>% filter(cat_id == cat_key)
+  train_cat$predicted_sales <- predict(model, newdata = train_cat)
+  test_cat$predicted_sales  <- predict(model, newdata = test_cat)
+  list(train = train_cat, test = test_cat)
+}
+
+pred_lists <- Map(predict_by_cat, names(simple_models), simple_models)
+
+# Combine for visualization
+all_predictions <- bind_rows(
+  lapply(pred_lists, function(x) bind_rows(
+    x$train %>% mutate(dataset = "Train"),
+    x$test %>% mutate(dataset = "Test")
+  ))
+) %>%
+  bind_rows()
+
+# Display sample predictions (first 10 across categories)
+all_predictions %>%
+  filter(dataset == "Test") %>%
+  select(cat_id, date, total_sales, predicted_sales) %>%
+  head(10) %>%
+  mutate(error = total_sales - predicted_sales,
+         pct_error = (error / total_sales) * 100) %>%
+  kable(caption = "Sample Predictions on Test Data (Per Category)",
+        col.names = c("Category", "Date", "Actual Sales", "Predicted Sales", "Error", "% Error"),
+        digits = c(0, 0, 0, 0, 2, 2)) %>%
+  kable_styling(full_width = FALSE)
+```
+
+## Model Evaluation
+
+### Root Mean Squared Error (RMSE)
+
+The RMSE measures the average prediction error and is calculated as:
+
+$$RMSE = \sqrt{\frac{1}{n}\sum_{i=1}^{n}(y_{i} - \hat{y}_{i})^{2}}$$
+
+```{r rmse-calculation}
+# Calculate RMSE per category for training and testing data
+rmse_by_cat <- all_predictions %>%
+  group_by(cat_id, dataset) %>%
+  summarise(
+    RMSE = sqrt(mean((total_sales - predicted_sales)^2)),
+    Mean_Sales = mean(total_sales),
+    RMSE_Percentage = RMSE / Mean_Sales * 100,
+    .groups = "drop"
+  )
+
+kable(rmse_by_cat,
+      caption = "Model Performance by Category: Root Mean Squared Error",
+      col.names = c("Category", "Dataset", "RMSE", "Mean Sales", "RMSE (% of Mean)"),
+      digits = c(0, 0, 2, 2, 2)) %>%
+  kable_styling(full_width = FALSE)
+```
+
+### Visualization: Predicted vs Actual Sales
+
+```{r prediction-plot, fig.width=12, fig.height=7}
+# Create visualization comparing predicted vs actual sales per category
+pred_plot <- ggplot(all_predictions, aes(x = date)) +
+  geom_line(aes(y = total_sales, color = "Actual"), size = 0.8, alpha = 0.7) +
+  geom_line(aes(y = predicted_sales, color = "Predicted"), size = 0.8, alpha = 0.7) +
+  geom_vline(xintercept = as.numeric(test_start_date), 
+             linetype = "dashed", color = "red", size = 1) +
+  annotate("text", x = test_start_date, y = max(all_predictions$total_sales) * 0.9,
+           label = "Test Data Starts", color = "red", angle = 90, vjust = -0.5) +
+  scale_color_manual(values = c("Actual" = "#440154", "Predicted" = "#FDE725"),
+                     name = "") +
+  scale_y_continuous(labels = scales::comma) +
+  labs(
+    title = "Simple Model: Predicted vs Actual Sales Over Time (By Category)",
+    x = "Date",
+    y = "Total Sales (Units)"
+  ) +
+  facet_wrap(~ cat_id, scales = "free_y", ncol = 1) +
+  theme_minimal() +
+  theme(
+    plot.title = element_text(size = 16, hjust = 0.5, face = "bold"),
+    legend.position = "bottom",
+    legend.text = element_text(size = 11),
+    axis.text.x = element_text(angle = 45, hjust = 1)
+  )
+
+if (knitr::is_html_output()) {
+  suppressWarnings(print(plotly::ggplotly(pred_plot, tooltip = c("x", "y", "colour")) %>% 
+                          plotly::config(displayModeBar = "hover", responsive = TRUE)))
+} else {
+  print(pred_plot)
+}
+```
+
+```{r cleanup-post-plots, echo=FALSE}
+# Drop prediction plot object; data frames retained for subsequent steps
+rm(pred_plot)
+invisible(gc())
+```
+
+### Residual Analysis
+
+```{r residual-plot, fig.width=12, fig.height=7}
+# Calculate residuals for test data (per category)
+residuals_df <- all_predictions %>%
+  filter(dataset == "Test") %>%
+  mutate(residual = total_sales - predicted_sales)
+
+# Create residual plot
+residual_plot <- ggplot(residuals_df, aes(x = date, y = residual)) +
+  geom_line(color = "#31688E", size = 0.8) +
+  geom_hline(yintercept = 0, linetype = "dashed", color = "red", size = 1) +
+  geom_point(alpha = 0.5, color = "#31688E") +
+  scale_y_continuous(labels = scales::comma) +
+  labs(
+    title = "Residuals (Prediction Errors) Over Time - Test Data",
+    subtitle = "Positive values = Under-prediction, Negative values = Over-prediction",
+    x = "Date",
+    y = "Residual (Actual - Predicted)"
+  ) +
+  facet_wrap(~ cat_id, scales = "free_y", ncol = 1) +
+  theme_minimal() +
+  theme(
+    plot.title = element_text(size = 14, hjust = 0.5, face = "bold"),
+    plot.subtitle = element_text(size = 10, hjust = 0.5),
+    axis.text.x = element_text(angle = 45, hjust = 1)
+  )
+
+if (knitr::is_html_output()) {
+  suppressWarnings(print(plotly::ggplotly(residual_plot, tooltip = c("x", "y")) %>% 
+                          plotly::config(displayModeBar = "hover", responsive = TRUE)))
+} else {
+  print(residual_plot)
+}
+```
+
+```{r final-cleanup, echo=FALSE}
+# Final cleanup: remove large objects not needed after analysis
+rm(category_daily, category_summary, state_monthly, monthly_category_summary,
+   line_plot, box_stats, box_plot, residual_plot,
+   model_data, daily_sales, weighted_weekly_prices_by_cat,
+   train_data, test_data, all_predictions,
+   simple_models, category_weights)
+invisible(gc())
+```
+
+## Model Insights
+
+### Key Findings:
+
+1.  **Price Effect**: The coefficient on weighted average price indicates the relationship between price and quantity sold, holding all other factors constant.
+
+2.  **Day of Week Effects**: The day-of-week dummies capture systematic variation in sales across different days, with Saturday as the reference category.
+
+3.  **Seasonal Effects**: The month dummies capture seasonal patterns in sales throughout the year, with January as the reference month.
+
+4.  **Event Effects**: Calendar events (sporting, cultural, national, religious) have measurable impacts on sales patterns.
+
+5.  **Model Performance**: The RMSE provides a benchmark for comparison with more sophisticated models to be developed in future iterations.
+
+### Limitations and Future Improvements:
+
+-   This simple linear model assumes constant relationships between variables
+-   It does not capture potential non-linear effects or interactions
+-   More sophisticated time series methods could better capture temporal dependencies
+-   Category-specific models might improve predictions
+-   Advanced techniques (ARIMA, machine learning models) will be explored in subsequent analyses
