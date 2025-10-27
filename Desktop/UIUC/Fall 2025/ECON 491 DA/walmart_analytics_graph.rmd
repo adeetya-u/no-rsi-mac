@@ -696,20 +696,18 @@ kable(rmse_by_cat,
 
 ### Visualization: Predicted vs Actual Sales
 
-```{r prediction-plot, fig.width=12, fig.height=7}
-# Create visualization comparing predicted vs actual sales per category
-pred_plot <- ggplot(all_predictions, aes(x = date)) +
+```{r prediction-plot-train, fig.width=12, fig.height=7}
+# Create visualization for TRAINING data only
+train_predictions <- all_predictions %>% filter(dataset == "Train")
+
+pred_plot_train <- ggplot(train_predictions, aes(x = date)) +
   geom_line(aes(y = total_sales, color = "Actual"), size = 0.8, alpha = 0.7) +
   geom_line(aes(y = predicted_sales, color = "Predicted"), size = 0.8, alpha = 0.7) +
-  geom_vline(xintercept = as.numeric(test_start_date), 
-             linetype = "dashed", color = "red", size = 1) +
-  annotate("text", x = test_start_date, y = max(all_predictions$total_sales) * 0.9,
-           label = "Test Data Starts", color = "red", angle = 90, vjust = -0.5) +
   scale_color_manual(values = c("Actual" = "#440154", "Predicted" = "#FDE725"),
                      name = "") +
   scale_y_continuous(labels = scales::comma) +
   labs(
-    title = "Simple Model: Predicted vs Actual Sales Over Time (By Category)",
+    title = "Training Data: Predicted vs Actual Sales (By Category)",
     x = "Date",
     y = "Total Sales (Units)"
   ) +
@@ -723,16 +721,48 @@ pred_plot <- ggplot(all_predictions, aes(x = date)) +
   )
 
 if (knitr::is_html_output()) {
-  suppressWarnings(print(plotly::ggplotly(pred_plot, tooltip = c("x", "y", "colour")) %>% 
+  suppressWarnings(print(plotly::ggplotly(pred_plot_train, tooltip = c("x", "y", "colour")) %>% 
                           plotly::config(displayModeBar = "hover", responsive = TRUE)))
 } else {
-  print(pred_plot)
+  print(pred_plot_train)
+}
+```
+
+```{r prediction-plot-test, fig.width=12, fig.height=7}
+# Create visualization for TEST data only
+test_predictions <- all_predictions %>% filter(dataset == "Test")
+
+pred_plot_test <- ggplot(test_predictions, aes(x = date)) +
+  geom_line(aes(y = total_sales, color = "Actual"), size = 0.8, alpha = 0.7) +
+  geom_line(aes(y = predicted_sales, color = "Predicted"), size = 0.8, alpha = 0.7) +
+  scale_color_manual(values = c("Actual" = "#440154", "Predicted" = "#FDE725"),
+                     name = "") +
+  scale_y_continuous(labels = scales::comma) +
+  labs(
+    title = "Test Data: Predicted vs Actual Sales (By Category)",
+    x = "Date",
+    y = "Total Sales (Units)"
+  ) +
+  facet_wrap(~ cat_id, scales = "free_y", ncol = 1) +
+  theme_minimal() +
+  theme(
+    plot.title = element_text(size = 16, hjust = 0.5, face = "bold"),
+    legend.position = "bottom",
+    legend.text = element_text(size = 11),
+    axis.text.x = element_text(angle = 45, hjust = 1)
+  )
+
+if (knitr::is_html_output()) {
+  suppressWarnings(print(plotly::ggplotly(pred_plot_test, tooltip = c("x", "y", "colour")) %>% 
+                          plotly::config(displayModeBar = "hover", responsive = TRUE)))
+} else {
+  print(pred_plot_test)
 }
 ```
 
 ```{r cleanup-post-plots, echo=FALSE}
-# Drop prediction plot object; data frames retained for subsequent steps
-rm(pred_plot)
+# Drop prediction plot objects; data frames retained for subsequent steps
+rm(pred_plot_train, pred_plot_test)
 invisible(gc())
 ```
 
