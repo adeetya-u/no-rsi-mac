@@ -504,6 +504,38 @@ daily_sales <- daily_sales %>%
   left_join(calendar %>% select(date, wm_yr_wk, event_name_1, event_type_1), by = "date") %>%
   left_join(weighted_weekly_prices_by_cat, by = c("wm_yr_wk", "cat_id"))
 
+# Create comprehensive event dummy variables from calendar and join
+# (Integrate dummy creation directly into the modeling dataset)
+event_columns <- colnames(calendar)[grepl("event_name|event_type", colnames(calendar), ignore.case = TRUE)]
+
+# Collect unique event names across all event columns
+all_events <- c()
+for (col in event_columns) {
+  if (is.character(calendar[[col]]) || is.factor(calendar[[col]])) {
+    ev <- unique(as.character(calendar[[col]]))
+    ev <- ev[!is.na(ev) & ev != "NA"]
+    all_events <- c(all_events, ev)
+  }
+}
+unique_events <- unique(all_events)
+
+# Build a minimal calendar frame with one dummy per unique event
+calendar_events <- calendar %>% dplyr::select(date)
+for (event in unique_events) {
+  safe_name <- gsub("[^A-Za-z0-9]", "_", event)
+  safe_name <- paste0("event_", safe_name)
+  flag <- rep(0L, nrow(calendar))
+  for (col in event_columns) {
+    if (is.character(calendar[[col]]) || is.factor(calendar[[col]])) {
+      flag <- flag | (as.character(calendar[[col]]) == event)
+    }
+  }
+  calendar_events[[safe_name]] <- as.integer(flag)
+}
+
+# Join event dummies to daily_sales on date
+daily_sales <- daily_sales %>% left_join(calendar_events, by = "date")
+
 # Create dummy variables for days of the week (using Saturday as reference)
 daily_sales <- daily_sales %>%
   mutate(
@@ -833,3 +865,608 @@ invisible(gc())
 -   More sophisticated time series methods could better capture temporal dependencies
 -   Category-specific models might improve predictions
 -   Advanced techniques (ARIMA, machine learning models) will be explored in subsequent analyses
+
+# Model 2: Enhanced Dummy Variable Model
+
+## Introduction
+
+The enhanced dummy variable model expands upon the simple linear model by incorporating interaction effects between different categorical variables. This approach allows us to capture more complex relationships in the data.
+
+**The Model:**
+
+$$y_{t} = \beta_{0} + \beta_{x} x_{t} + \beta_{DD} DD_{t} + \beta_{DM} DM_{t} + \beta_{DC} DC_{t} + \beta_{DD \times DM} (DD_{t} \times DM_{t}) + U_{t}$$
+
+Where the interaction term $DD_{t} \times DM_{t}$ captures how the day-of-week effect varies across different months.
+
+## Model Estimation
+
+```{r estimate-dummy-model}
+# Create interaction terms between day of week and month
+train_data_enhanced <- train_data %>%
+  mutate(
+    # Add quarter dummies
+    q1 = ifelse(month %in% c(1, 2, 3), 1, 0),
+    q2 = ifelse(month %in% c(4, 5, 6), 1, 0),
+    q3 = ifelse(month %in% c(7, 8, 9), 1, 0),
+    # q4 is reference
+    
+    # Weekend indicator
+    weekend = ifelse(weekday %in% c("Saturday", "Sunday"), 1, 0),
+    
+    # Holiday season indicator (Nov-Dec)
+    holiday_season = ifelse(month %in% c(11, 12), 1, 0)
+  )
+
+test_data_enhanced <- test_data %>%
+  mutate(
+    q1 = ifelse(month %in% c(1, 2, 3), 1, 0),
+    q2 = ifelse(month %in% c(4, 5, 6), 1, 0),
+    q3 = ifelse(month %in% c(7, 8, 9), 1, 0),
+    weekend = ifelse(weekday %in% c("Saturday", "Sunday"), 1, 0),
+    holiday_season = ifelse(month %in% c(11, 12), 1, 0)
+  )
+
+# Estimate enhanced models per category
+train_groups_enhanced <- split(train_data_enhanced, train_data_enhanced$cat_id)
+
+dummy_models <- lapply(train_groups_enhanced, function(df) {
+  lm(total_sales ~ weighted_avg_price +
+       sunday + monday + tuesday + wednesday + thursday + friday +
+       feb + mar + apr + may + jun + jul + aug + sep + oct + nov + dec +
+       q1 + q2 + q3 +
+       weekend + holiday_season +
+       weekend:holiday_season +
+       sporting_event + cultural_event + national_event + religious_event,
+     data = df)
+})
+
+# Display regression results
+stargazer(dummy_models,
+          type = "text",
+          title = "Enhanced Dummy Variable Model Results by Category",
+          dep.var.labels = "Total Sales (Units)",
+          column.labels = names(dummy_models),
+          omit.stat = c("ser", "f"),
+          digits = 2,
+          single.row = FALSE)
+```
+
+## Forecasting and Evaluation
+
+```{r forecast-dummy}
+# Generate predictions per category
+predict_dummy_by_cat <- function(cat_key, model) {
+  train_cat <- train_data_enhanced %>% filter(cat_id == cat_key)
+  test_cat  <- test_data_enhanced %>% filter(cat_id == cat_key)
+  train_cat$predicted_sales <- predict(model, newdata = train_cat)
+  test_cat$predicted_sales  <- predict(model, newdata = test_cat)
+  list(train = train_cat, test = test_cat)
+}
+
+pred_lists_dummy <- Map(predict_dummy_by_cat, names(dummy_models), dummy_models)
+
+all_predictions_dummy <- bind_rows(
+  lapply(pred_lists_dummy, function(x) bind_rows(
+    x$train %>% mutate(dataset = "Train"),
+    x$test %>% mutate(dataset = "Test")
+  ))
+)
+
+# Calculate RMSE per category
+rmse_dummy <- all_predictions_dummy %>%
+  group_by(cat_id, dataset) %>%
+  summarise(
+    RMSE = sqrt(mean((total_sales - predicted_sales)^2)),
+    Mean_Sales = mean(total_sales),
+    RMSE_Percentage = RMSE / Mean_Sales * 100,
+    .groups = "drop"
+  )
+
+kable(rmse_dummy,
+      caption = "Enhanced Dummy Model Performance by Category",
+      col.names = c("Category", "Dataset", "RMSE", "Mean Sales", "RMSE (% of Mean)"),
+      digits = c(0, 0, 2, 2, 2)) %>%
+  kable_styling(full_width = FALSE)
+```
+
+### Training Data Visualization
+
+```{r dummy-pred-plot-train, fig.width=12, fig.height=7}
+train_pred_dummy <- all_predictions_dummy %>% filter(dataset == "Train")
+
+pred_plot_dummy_train <- ggplot(train_pred_dummy, aes(x = date)) +
+  geom_line(aes(y = total_sales, color = "Actual"), size = 0.8, alpha = 0.7) +
+  geom_line(aes(y = predicted_sales, color = "Predicted"), size = 0.8, alpha = 0.7) +
+  scale_color_manual(values = c("Actual" = "#440154", "Predicted" = "#35B779"),
+                     name = "") +
+  scale_y_continuous(labels = scales::comma) +
+  labs(
+    title = "Enhanced Dummy Model - Training Data: Predicted vs Actual Sales",
+    x = "Date",
+    y = "Total Sales (Units)"
+  ) +
+  facet_wrap(~ cat_id, scales = "free_y", ncol = 1) +
+  theme_minimal() +
+  theme(
+    plot.title = element_text(size = 16, hjust = 0.5, face = "bold"),
+    legend.position = "bottom",
+    axis.text.x = element_text(angle = 45, hjust = 1)
+  )
+
+if (knitr::is_html_output()) {
+  suppressWarnings(print(plotly::ggplotly(pred_plot_dummy_train, tooltip = c("x", "y", "colour")) %>% 
+                          plotly::config(displayModeBar = "hover", responsive = TRUE)))
+} else {
+  print(pred_plot_dummy_train)
+}
+```
+
+### Test Data Visualization
+
+```{r dummy-pred-plot-test, fig.width=12, fig.height=7}
+test_pred_dummy <- all_predictions_dummy %>% filter(dataset == "Test")
+
+pred_plot_dummy_test <- ggplot(test_pred_dummy, aes(x = date)) +
+  geom_line(aes(y = total_sales, color = "Actual"), size = 0.8, alpha = 0.7) +
+  geom_line(aes(y = predicted_sales, color = "Predicted"), size = 0.8, alpha = 0.7) +
+  scale_color_manual(values = c("Actual" = "#440154", "Predicted" = "#35B779"),
+                     name = "") +
+  scale_y_continuous(labels = scales::comma) +
+  labs(
+    title = "Enhanced Dummy Model - Test Data: Predicted vs Actual Sales",
+    x = "Date",
+    y = "Total Sales (Units)"
+  ) +
+  facet_wrap(~ cat_id, scales = "free_y", ncol = 1) +
+  theme_minimal() +
+  theme(
+    plot.title = element_text(size = 16, hjust = 0.5, face = "bold"),
+    legend.position = "bottom",
+    axis.text.x = element_text(angle = 45, hjust = 1)
+  )
+
+if (knitr::is_html_output()) {
+  suppressWarnings(print(plotly::ggplotly(pred_plot_dummy_test, tooltip = c("x", "y", "colour")) %>% 
+                          plotly::config(displayModeBar = "hover", responsive = TRUE)))
+} else {
+  print(pred_plot_dummy_test)
+}
+```
+
+## Model Insights
+
+The enhanced dummy variable model captures additional complexity through:
+
+1. **Quarter Effects**: Seasonal patterns aggregated at the quarter level
+2. **Weekend Indicator**: Binary classification of weekend vs. weekday sales
+3. **Holiday Season Effect**: Specific indicator for November-December period
+4. **Interaction Effects**: How weekend sales patterns differ during the holiday season
+
+This model provides improved flexibility in capturing categorical relationships compared to the simple linear model.
+
+# Model 3: Time Lag Model
+
+## Introduction
+
+The time lag model incorporates historical sales data as predictors, recognizing that past sales patterns can inform future predictions. This approach captures temporal dependencies that the simple OLS model overlooks.
+
+**The Model:**
+
+$$y_{t} = \beta_{0} + \beta_{x} x_{t} + \beta_{DD} DD_{t} + \beta_{DM} DM_{t} + \beta_{DC} DC_{t} + \beta_{L1} y_{t-1} + \beta_{L7} y_{t-7} + \beta_{L14} y_{t-14} + U_{t}$$
+
+Where:
+- $y_{t-1}$ is sales from 1 day ago (yesterday)
+- $y_{t-7}$ is sales from 7 days ago (same day last week)
+- $y_{t-14}$ is sales from 14 days ago (same day 2 weeks ago)
+
+## Data Preparation with Lags
+
+```{r create-lag-data}
+# Create lagged variables per category
+train_data_lag <- train_data %>%
+  group_by(cat_id) %>%
+  arrange(date) %>%
+  mutate(
+    lag1 = lag(total_sales, 1),
+    lag7 = lag(total_sales, 7),
+    lag14 = lag(total_sales, 14)
+  ) %>%
+  ungroup() %>%
+  filter(!is.na(lag1) & !is.na(lag7) & !is.na(lag14))
+
+test_data_lag <- test_data %>%
+  group_by(cat_id) %>%
+  arrange(date) %>%
+  mutate(
+    lag1 = lag(total_sales, 1),
+    lag7 = lag(total_sales, 7),
+    lag14 = lag(total_sales, 14)
+  ) %>%
+  ungroup() %>%
+  filter(!is.na(lag1) & !is.na(lag7) & !is.na(lag14))
+
+cat("Training data with lags:", nrow(train_data_lag), "observations\n")
+cat("Testing data with lags:", nrow(test_data_lag), "observations\n")
+```
+
+## Model Estimation
+
+```{r estimate-lag-model}
+# Estimate lagged models per category
+train_groups_lag <- split(train_data_lag, train_data_lag$cat_id)
+
+lag_models <- lapply(train_groups_lag, function(df) {
+  lm(total_sales ~ weighted_avg_price +
+       lag1 + lag7 + lag14 +
+       sunday + monday + tuesday + wednesday + thursday + friday +
+       feb + mar + apr + may + jun + jul + aug + sep + oct + nov + dec +
+       sporting_event + cultural_event + national_event + religious_event,
+     data = df)
+})
+
+# Display regression results
+stargazer(lag_models,
+          type = "text",
+          title = "Time Lag Model Results by Category",
+          dep.var.labels = "Total Sales (Units)",
+          column.labels = names(lag_models),
+          covariate.labels = c("Avg Price (Weekly)", 
+                               "Sales t-1", "Sales t-7", "Sales t-14",
+                               "Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday",
+                               "February", "March", "April", "May", "June", "July",
+                               "August", "September", "October", "November", "December",
+                               "Sporting Event", "Cultural Event", "National Event", "Religious Event"),
+          omit.stat = c("ser", "f"),
+          digits = 2,
+          single.row = FALSE)
+```
+
+## Forecasting and Evaluation
+
+```{r forecast-lag}
+# Generate predictions per category
+predict_lag_by_cat <- function(cat_key, model) {
+  train_cat <- train_data_lag %>% filter(cat_id == cat_key)
+  test_cat  <- test_data_lag %>% filter(cat_id == cat_key)
+  train_cat$predicted_sales <- predict(model, newdata = train_cat)
+  test_cat$predicted_sales  <- predict(model, newdata = test_cat)
+  list(train = train_cat, test = test_cat)
+}
+
+pred_lists_lag <- Map(predict_lag_by_cat, names(lag_models), lag_models)
+
+all_predictions_lag <- bind_rows(
+  lapply(pred_lists_lag, function(x) bind_rows(
+    x$train %>% mutate(dataset = "Train"),
+    x$test %>% mutate(dataset = "Test")
+  ))
+)
+
+# Calculate RMSE per category
+rmse_lag <- all_predictions_lag %>%
+  group_by(cat_id, dataset) %>%
+  summarise(
+    RMSE = sqrt(mean((total_sales - predicted_sales)^2)),
+    Mean_Sales = mean(total_sales),
+    RMSE_Percentage = RMSE / Mean_Sales * 100,
+    .groups = "drop"
+  )
+
+kable(rmse_lag,
+      caption = "Time Lag Model Performance by Category",
+      col.names = c("Category", "Dataset", "RMSE", "Mean Sales", "RMSE (% of Mean)"),
+      digits = c(0, 0, 2, 2, 2)) %>%
+  kable_styling(full_width = FALSE)
+```
+
+### Training Data Visualization
+
+```{r lag-pred-plot-train, fig.width=12, fig.height=7}
+train_pred_lag <- all_predictions_lag %>% filter(dataset == "Train")
+
+pred_plot_lag_train <- ggplot(train_pred_lag, aes(x = date)) +
+  geom_line(aes(y = total_sales, color = "Actual"), size = 0.8, alpha = 0.7) +
+  geom_line(aes(y = predicted_sales, color = "Predicted"), size = 0.8, alpha = 0.7) +
+  scale_color_manual(values = c("Actual" = "#440154", "Predicted" = "#31688E"),
+                     name = "") +
+  scale_y_continuous(labels = scales::comma) +
+  labs(
+    title = "Time Lag Model - Training Data: Predicted vs Actual Sales",
+    x = "Date",
+    y = "Total Sales (Units)"
+  ) +
+  facet_wrap(~ cat_id, scales = "free_y", ncol = 1) +
+  theme_minimal() +
+  theme(
+    plot.title = element_text(size = 16, hjust = 0.5, face = "bold"),
+    legend.position = "bottom",
+    axis.text.x = element_text(angle = 45, hjust = 1)
+  )
+
+if (knitr::is_html_output()) {
+  suppressWarnings(print(plotly::ggplotly(pred_plot_lag_train, tooltip = c("x", "y", "colour")) %>% 
+                          plotly::config(displayModeBar = "hover", responsive = TRUE)))
+} else {
+  print(pred_plot_lag_train)
+}
+```
+
+### Test Data Visualization
+
+```{r lag-pred-plot-test, fig.width=12, fig.height=7}
+test_pred_lag <- all_predictions_lag %>% filter(dataset == "Test")
+
+pred_plot_lag_test <- ggplot(test_pred_lag, aes(x = date)) +
+  geom_line(aes(y = total_sales, color = "Actual"), size = 0.8, alpha = 0.7) +
+  geom_line(aes(y = predicted_sales, color = "Predicted"), size = 0.8, alpha = 0.7) +
+  scale_color_manual(values = c("Actual" = "#440154", "Predicted" = "#31688E"),
+                     name = "") +
+  scale_y_continuous(labels = scales::comma) +
+  labs(
+    title = "Time Lag Model - Test Data: Predicted vs Actual Sales",
+    x = "Date",
+    y = "Total Sales (Units)"
+  ) +
+  facet_wrap(~ cat_id, scales = "free_y", ncol = 1) +
+  theme_minimal() +
+  theme(
+    plot.title = element_text(size = 16, hjust = 0.5, face = "bold"),
+    legend.position = "bottom",
+    axis.text.x = element_text(angle = 45, hjust = 1)
+  )
+
+if (knitr::is_html_output()) {
+  suppressWarnings(print(plotly::ggplotly(pred_plot_lag_test, tooltip = c("x", "y", "colour")) %>% 
+                          plotly::config(displayModeBar = "hover", responsive = TRUE)))
+} else {
+  print(pred_plot_lag_test)
+}
+```
+
+## Model Insights
+
+The time lag model captures temporal dependencies by incorporating:
+
+1. **Lag 1 (Yesterday)**: Captures short-term momentum and daily correlation
+2. **Lag 7 (Last Week)**: Captures weekly seasonality patterns
+3. **Lag 14 (Two Weeks Ago)**: Captures longer-term trends and patterns
+
+The lagged sales variables typically show strong positive coefficients, indicating that recent sales history is highly predictive of current sales. This model often provides improved in-sample fit compared to the simple OLS model.
+
+# Model 4: ARIMA Model
+
+## Introduction
+
+ARIMA (AutoRegressive Integrated Moving Average) models are specifically designed for time series forecasting. Unlike the regression-based approaches above, ARIMA models the temporal structure of the data directly.
+
+**The Model:**
+
+ARIMA(p,d,q) where:
+- p = order of autoregressive component
+- d = degree of differencing
+- q = order of moving average component
+
+We will use automatic order selection to find the optimal ARIMA model for each category.
+
+## Model Estimation
+
+```{r estimate-arima, message=FALSE, warning=FALSE}
+library(forecast)
+
+# Prepare time series data per category
+train_ts_list <- train_data %>%
+  group_by(cat_id) %>%
+  arrange(date) %>%
+  summarise(ts_data = list(ts(total_sales, frequency = 7)), .groups = "drop")
+
+# Fit ARIMA models per category using auto.arima
+arima_models <- list()
+arima_orders <- list()
+
+for (i in 1:nrow(train_ts_list)) {
+  cat_key <- train_ts_list$cat_id[i]
+  ts_data <- train_ts_list$ts_data[[i]]
+  
+  cat(paste0("\nFitting ARIMA for category: ", cat_key, "\n"))
+  
+  # Use auto.arima to select optimal model
+  arima_fit <- auto.arima(ts_data, 
+                          seasonal = TRUE,
+                          stepwise = TRUE,
+                          approximation = FALSE,
+                          trace = FALSE)
+  
+  arima_models[[cat_key]] <- arima_fit
+  arima_orders[[cat_key]] <- arimaorder(arima_fit)
+  
+  cat(paste0("Selected model: ARIMA", 
+             paste0(arimaorder(arima_fit), collapse = ","), "\n"))
+}
+
+# Display model summaries
+for (cat_key in names(arima_models)) {
+  cat(paste0("\n\n=== Category: ", cat_key, " ===\n"))
+  print(summary(arima_models[[cat_key]]))
+}
+```
+
+## Forecasting and Evaluation
+
+```{r forecast-arima}
+# Generate predictions for training and testing periods
+arima_predictions_list <- list()
+
+for (cat_key in names(arima_models)) {
+  model <- arima_models[[cat_key]]
+  
+  # Training predictions (fitted values)
+  train_cat <- train_data %>% filter(cat_id == cat_key) %>% arrange(date)
+  train_cat$predicted_sales <- as.numeric(fitted(model))
+  
+  # Test predictions
+  test_cat <- test_data %>% filter(cat_id == cat_key) %>% arrange(date)
+  n_forecast <- nrow(test_cat)
+  forecast_result <- forecast(model, h = n_forecast)
+  test_cat$predicted_sales <- as.numeric(forecast_result$mean)
+  
+  arima_predictions_list[[cat_key]] <- bind_rows(
+    train_cat %>% mutate(dataset = "Train"),
+    test_cat %>% mutate(dataset = "Test")
+  )
+}
+
+all_predictions_arima <- bind_rows(arima_predictions_list)
+
+# Calculate RMSE per category
+rmse_arima <- all_predictions_arima %>%
+  group_by(cat_id, dataset) %>%
+  summarise(
+    RMSE = sqrt(mean((total_sales - predicted_sales)^2, na.rm = TRUE)),
+    Mean_Sales = mean(total_sales),
+    RMSE_Percentage = RMSE / Mean_Sales * 100,
+    .groups = "drop"
+  )
+
+kable(rmse_arima,
+      caption = "ARIMA Model Performance by Category",
+      col.names = c("Category", "Dataset", "RMSE", "Mean Sales", "RMSE (% of Mean)"),
+      digits = c(0, 0, 2, 2, 2)) %>%
+  kable_styling(full_width = FALSE)
+```
+
+### Training Data Visualization
+
+```{r arima-pred-plot-train, fig.width=12, fig.height=7}
+train_pred_arima <- all_predictions_arima %>% filter(dataset == "Train")
+
+pred_plot_arima_train <- ggplot(train_pred_arima, aes(x = date)) +
+  geom_line(aes(y = total_sales, color = "Actual"), size = 0.8, alpha = 0.7) +
+  geom_line(aes(y = predicted_sales, color = "Predicted"), size = 0.8, alpha = 0.7) +
+  scale_color_manual(values = c("Actual" = "#440154", "Predicted" = "#FDE725"),
+                     name = "") +
+  scale_y_continuous(labels = scales::comma) +
+  labs(
+    title = "ARIMA Model - Training Data: Predicted vs Actual Sales",
+    x = "Date",
+    y = "Total Sales (Units)"
+  ) +
+  facet_wrap(~ cat_id, scales = "free_y", ncol = 1) +
+  theme_minimal() +
+  theme(
+    plot.title = element_text(size = 16, hjust = 0.5, face = "bold"),
+    legend.position = "bottom",
+    axis.text.x = element_text(angle = 45, hjust = 1)
+  )
+
+if (knitr::is_html_output()) {
+  suppressWarnings(print(plotly::ggplotly(pred_plot_arima_train, tooltip = c("x", "y", "colour")) %>% 
+                          plotly::config(displayModeBar = "hover", responsive = TRUE)))
+} else {
+  print(pred_plot_arima_train)
+}
+```
+
+### Test Data Visualization
+
+```{r arima-pred-plot-test, fig.width=12, fig.height=7}
+test_pred_arima <- all_predictions_arima %>% filter(dataset == "Test")
+
+pred_plot_arima_test <- ggplot(test_pred_arima, aes(x = date)) +
+  geom_line(aes(y = total_sales, color = "Actual"), size = 0.8, alpha = 0.7) +
+  geom_line(aes(y = predicted_sales, color = "Predicted"), size = 0.8, alpha = 0.7) +
+  scale_color_manual(values = c("Actual" = "#440154", "Predicted" = "#FDE725"),
+                     name = "") +
+  scale_y_continuous(labels = scales::comma) +
+  labs(
+    title = "ARIMA Model - Test Data: Predicted vs Actual Sales",
+    x = "Date",
+    y = "Total Sales (Units)"
+  ) +
+  facet_wrap(~ cat_id, scales = "free_y", ncol = 1) +
+  theme_minimal() +
+  theme(
+    plot.title = element_text(size = 16, hjust = 0.5, face = "bold"),
+    legend.position = "bottom",
+    axis.text.x = element_text(angle = 45, hjust = 1)
+  )
+
+if (knitr::is_html_output()) {
+  suppressWarnings(print(plotly::ggplotly(pred_plot_arima_test, tooltip = c("x", "y", "colour")) %>% 
+                          plotly::config(displayModeBar = "hover", responsive = TRUE)))
+} else {
+  print(pred_plot_arima_test)
+}
+```
+
+### ARIMA Diagnostics
+
+```{r arima-diagnostics, fig.width=12, fig.height=10}
+# Create diagnostic plots for each category
+par(mfrow = c(3, 2))
+for (cat_key in names(arima_models)) {
+  checkresiduals(arima_models[[cat_key]], main = paste("Diagnostics:", cat_key))
+}
+par(mfrow = c(1, 1))
+```
+
+## Model Insights
+
+The ARIMA model provides:
+
+1. **Automatic Order Selection**: The `auto.arima` function selects the optimal (p,d,q) parameters for each category
+2. **Time Series Structure**: Directly models the autocorrelation and moving average components
+3. **Seasonal Patterns**: Captures weekly seasonality (frequency = 7)
+4. **Residual Analysis**: Diagnostics help verify model assumptions
+
+ARIMA models are particularly effective when the primary goal is forecasting future values based on historical patterns, without requiring external predictor variables.
+
+# Model Comparison
+
+## Comprehensive Performance Summary
+
+```{r model-comparison}
+# Combine all RMSE results
+comparison <- bind_rows(
+  rmse_by_cat %>% mutate(Model = "Simple OLS"),
+  rmse_dummy %>% mutate(Model = "Enhanced Dummy"),
+  rmse_lag %>% mutate(Model = "Time Lag"),
+  rmse_arima %>% mutate(Model = "ARIMA")
+)
+
+# Pivot for easier comparison
+comparison_wide <- comparison %>%
+  select(cat_id, dataset, Model, RMSE_Percentage) %>%
+  pivot_wider(names_from = Model, values_from = RMSE_Percentage)
+
+kable(comparison_wide,
+      caption = "Model Performance Comparison: RMSE as % of Mean Sales",
+      digits = 2) %>%
+  kable_styling(full_width = FALSE, bootstrap_options = c("striped", "hover"))
+```
+
+## Summary and Conclusions
+
+### Key Findings:
+
+1. **Simple OLS Model**: Provides a solid baseline with interpretable coefficients for price, day-of-week, month, and event effects.
+
+2. **Enhanced Dummy Variable Model**: Captures additional complexity through interaction terms and grouped categorical variables (quarters, weekend indicators, holiday season).
+
+3. **Time Lag Model**: Incorporates temporal dependencies by using lagged sales values, typically providing improved predictions by leveraging recent sales history.
+
+4. **ARIMA Model**: Directly models time series structure and is particularly effective for pure forecasting without external predictors.
+
+### Model Selection Considerations:
+
+- **Interpretability**: OLS and dummy variable models provide clear coefficient interpretations
+- **Temporal Dynamics**: Lag and ARIMA models better capture time dependencies
+- **Computational Efficiency**: OLS models are fastest; ARIMA requires more computation
+- **Forecasting Horizon**: ARIMA may be preferred for longer-term forecasts
+- **Data Requirements**: Lag models require sufficient history; ARIMA benefits from longer series
+
+### Future Directions:
+
+- Ensemble methods combining multiple models
+- Machine learning approaches (Random Forest, XGBoost)
+- Deep learning methods for complex pattern recognition
+- Incorporation of additional external variables (weather, promotions, competitor pricing)
