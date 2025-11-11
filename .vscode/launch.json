@@ -1,0 +1,22 @@
+{
+    "configurations": [
+        {
+            "type": "swift",
+            "request": "launch",
+            "args": [],
+            "cwd": "${workspaceFolder:norsimac}/MicroBreaks",
+            "name": "Debug MicroBreaks (MicroBreaks)",
+            "program": "${workspaceFolder:norsimac}/MicroBreaks/.build/debug/MicroBreaks",
+            "preLaunchTask": "swift: Build Debug MicroBreaks (MicroBreaks)"
+        },
+        {
+            "type": "swift",
+            "request": "launch",
+            "args": [],
+            "cwd": "${workspaceFolder:norsimac}/MicroBreaks",
+            "name": "Release MicroBreaks (MicroBreaks)",
+            "program": "${workspaceFolder:norsimac}/MicroBreaks/.build/release/MicroBreaks",
+            "preLaunchTask": "swift: Build Release MicroBreaks (MicroBreaks)"
+        }
+    ]
+}
