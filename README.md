@@ -35,13 +35,43 @@ When you hit your limit, you'll get a notification to stretch for 20 seconds. Th
 
 ## Building from Source
 
+If you want to build the app yourself:
+
 ```bash
+# Clone the repo
 git clone https://github.com/adeetya-u/no-rsi-mac.git
 cd no-rsi-mac/MicroBreaks
+
+# Build the release version
 swift build -c release
+
+# Create the app bundle
+rm -rf MicroBreaks.app
+mkdir -p MicroBreaks.app/Contents/{MacOS,Resources}
+cp .build/arm64-apple-macosx/release/MicroBreaks MicroBreaks.app/Contents/MacOS/MicroBreaks
+cp Info.plist MicroBreaks.app/Contents/Info.plist
+cp AppIcon.icns MicroBreaks.app/Contents/Resources/AppIcon.icns
+chmod +x MicroBreaks.app/Contents/MacOS/MicroBreaks
+
+# Launch it
+open MicroBreaks.app
 ```
 
-Then create the app bundle (see full instructions in build script).
+Grant Accessibility permission when prompted, and you're good to go!
+
+### Viewing Logs
+
+If you want to see what's happening under the hood:
+
+```bash
+# Run from terminal to see output
+/path/to/MicroBreaks.app/Contents/MacOS/MicroBreaks
+
+# Or view system logs
+log stream --predicate 'process == "MicroBreaks"' --level debug
+```
+
+The app logs when it initializes, creates the event tap, and counts keystrokes.
 
 ## FAQ
 
