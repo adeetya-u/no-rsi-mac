@@ -1,65 +1,130 @@
-# Micro-Breaks
+# MicroBreaks
 
-A lightweight, privacy-focused macOS accessibility feature that provides gentle reminders for healthy breaks during long work sessions.
+A lightweight macOS menu bar app that helps prevent RSI (Repetitive Strain Injury) by reminding you to take regular breaks.
+
+![MicroBreaks Demo](Microbreaks.gif)
 
 ## Features
 
-- **On-device & Private**: All activity monitoring happens locally—no data leaves your Mac
-- **Smart Detection**: Tracks keyboard and mouse activity to determine when you're actively working
-- **Respectful**: Automatically pauses during fullscreen apps and presentations
-- **Accessible**: Fully keyboard-accessible and VoiceOver/Switch Control compatible
-- **Minimal & Beautiful**: Ultra-lightweight with Apple's design aesthetic
+- **Menu Bar Integration**: Unobtrusive menu bar presence with quick access to settings
+- **Dual Tracking Modes**: 
+  - Keystroke mode: Triggers break after configurable keystrokes (500/1K/2K/3K/5K)
+  - Time mode: Triggers break after set intervals (10/15/20/30 minutes)
+- **Smart Break System**: 20-second break notifications with sound
+- **Privacy-First**: All tracking happens locally on your device
+- **Accessibility Permission**: Uses CGEventTap for reliable keystroke monitoring
 
 ## How It Works
 
-Micro-Breaks monitors your typing and mouse activity to detect active work sessions. After a configurable interval (10-60 minutes), it prompts you with a gentle reminder to take a short break. The feature automatically:
+MicroBreaks monitors your keyboard activity in the background. When you reach your configured threshold (either keystroke count or time interval), it displays a notification prompting you to take a 20-second break. After the break completes, you'll get a "back to work" notification and the counter resets.
 
-- Pauses during fullscreen presentations (Keynote, PowerPoint, etc.)
-- Detects when you're idle and doesn't prompt during breaks
-- Provides accessible, keyboard-only reminders
-- Stores all settings locally in your UserDefaults
+The app automatically:
+- Pauses counting during active breaks
+- Monitors health of keystroke detection and auto-repairs if needed
+- Persists your settings across restarts
+- Shows first-run prompt to guide you through Accessibility permission setup
 
 ## Installation
 
-1. Open Terminal and navigate to the MicroBreaks directory
+### Building from Source
+
+1. Clone the repository:
+   ```bash
+   git clone https://github.com/adeetya-u/no-rsi-mac.git
+   cd no-rsi-mac/MicroBreaks
+   ```
+
 2. Build the project:
    ```bash
    swift build -c release
    ```
-3. Run the app from the `.build` directory
+
+3. Create the app bundle:
+   ```bash
+   ./build.sh
+   ```
+   Or manually:
+   ```bash
+   rm -rf MicroBreaks.app
+   mkdir -p MicroBreaks.app/Contents/{MacOS,Resources}
+   cp .build/arm64-apple-macosx/release/MicroBreaks MicroBreaks.app/Contents/MacOS/MicroBreaks
+   cp Info.plist MicroBreaks.app/Contents/Info.plist
+   cp AppIcon.icns MicroBreaks.app/Contents/Resources/AppIcon.icns
+   chmod +x MicroBreaks.app/Contents/MacOS/MicroBreaks
+   ```
+
+4. Launch the app:
+   ```bash
+   open MicroBreaks.app
+   ```
+
+5. Grant Accessibility permission when prompted (required for keystroke monitoring)
+
+## Usage
+
+1. Click the menu bar icon (walking figure) to access settings
+2. Choose your tracking mode:
+   - **Keystrokes**: Set threshold (500, 1000, 2000, 3000, or 5000 keystrokes)
+   - **Time**: Set interval (10, 15, 20, or 30 minutes)
+3. The counter displays in the menu
+4. When threshold is reached, take your 20-second break!
 
 ## Settings
 
-Accessible via System Settings → Accessibility (coming in a future update), or as a standalone settings window.
+### Configuration Options
 
-### Configuration
+**Keystroke Mode Thresholds:**
+- 500 keystrokes (quick breaks)
+- 1,000 keystrokes (default)
+- 2,000 keystrokes
+- 3,000 keystrokes
+- 5,000 keystrokes (extended sessions)
 
-- **Work Interval**: Choose how often you want reminders (10, 15, 20, 25, 30, 45, or 60 minutes)
-- **Break Duration**: 30-second guided stretches
-- **Auto-Pause**: Automatically pauses during fullscreen and presentations
+**Time Mode Intervals:**
+- 10 minutes
+- 15 minutes (default)
+- 20 minutes
+- 30 minutes
+
+**Break Duration:** Fixed 20-second break with notification sound
+
+## Requirements
+
+- macOS 13.0 or later
+- Accessibility permission for keystroke monitoring
+- Swift 5.9+ (for building from source)
 
 ## Privacy
 
-- No network access
-- No data collection
-- All processing happens on-device
-- Uses system-level accessibility APIs for activity monitoring
-
-## Accessibility
-
-- Full VoiceOver support
-- Switch Control compatible
-- Keyboard-only navigation
-- High contrast modes supported
-- Screen reader announcements
+- **100% Local**: No network access, no data collection
+- **No Tracking**: Keystroke monitoring only counts keys, doesn't record what you type
+- **Secure**: Uses Apple's CGEventTap API with Accessibility permission
+- **Open Source**: All code is available for review
 
 ## Technical Details
 
-- Built with SwiftUI
-- Uses `CGEventSource` for privacy-preserving activity monitoring
-- Timer-based scheduling for minimal resource usage
-- Observes system notification preferences
+- Built with Swift and SwiftUI
+- Uses `CGEventTap` for reliable global keystroke monitoring
+- MenuBarExtra for native menu bar integration
+- Timer-based health checks ensure monitoring stays active
+- Triple-redundant notification system (osascript + UserNotifications)
+- Persistent settings via UserDefaults
+
+## Troubleshooting
+
+**Keystroke counting not working:**
+1. Check System Settings → Privacy & Security → Accessibility
+2. Ensure MicroBreaks is enabled
+3. Relaunch the app after granting permission
+
+**Notifications not appearing:**
+- The app uses AppleScript notifications which should always work
+- Check that notification sound is enabled in System Settings
+
+**App needs permission again after rebuild:**
+- This is normal - rebuilding changes the app bundle signature
+- Re-grant Accessibility permission in System Settings
 
 ## License
 
-Copyright © 2024 Apple Inc.
+MIT License - feel free to modify and distribute
