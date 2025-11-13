@@ -6,7 +6,7 @@ A simple macOS menu bar app that reminds you to take breaks and stretch your han
 
 ## Why?
 
-Typing for hours without breaks can lead to RSI (Repetitive Strain Injury). MicroBreaks helps by giving you gentle reminders to take 20-second breaks.
+Typing for hours without breaks can lead to RSI (Repetitive Strain Injury) and Carpal Tunnel Syndrome. MicroBreaks helps reduce these risks by giving you gentle reminders to take 20-second breaks.
 
 ## Features
 
