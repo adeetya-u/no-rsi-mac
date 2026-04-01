@@ -6,9 +6,22 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 48px;
-  padding: 24px 48px;
+  gap: 20px;
+  padding: 24px 16px;
   background: var(--black);
+  /* Optimize for tall narrow displays (6.56" with 720x1612 resolution) */
+  flex-wrap: wrap;
+}
+
+/* For screens narrower than 900px (mobile), stack vertically */
+@media (max-width: 900px) {
+  .cal-panel {
+    flex-direction: column;
+    justify-content: flex-start;
+    padding: 32px 12px;
+    gap: 24px;
+    overflow-y: auto;
+  }
 }
 
 /* ── Clock side ── */
@@ -19,9 +32,23 @@
   justify-content: center;
 }
 
-.cal-digital-clock {
-  /* Subtle glow to lift the face off the black background */
-  filter: drop-shadow(0 0 28px rgba(255, 255, 255, 0.04));
+/* Shrink clock for mobile */
+@media (max-width: 900px) {
+  .cal-clock-side {
+    width: 100%;
+    max-width: 260px;
+    margin: 0 auto;
+  }
+
+  .cal-digital-clock {
+    width: 100%;
+    max-width: 260px;
+    height: auto;
+  }
+
+  .cal-digital-clock text {
+    font-size: 80px !important;
+  }
 }
 
 /* ── Info/Events side ── */
@@ -29,11 +56,24 @@
   position: relative;
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: 12px;
   min-width: 300px;
   max-width: 420px;
   max-height: 320px;
   overflow: hidden;
+}
+
+/* Optimize for mobile: full width, responsive sizing */
+@media (max-width: 900px) {
+  .cal-info-side {
+    width: 100%;
+    min-width: unset;
+    max-width: unset;
+    max-height: unset;
+    gap: 16px;
+    padding: 0;
+    overflow: visible;
+  }
 }
 
 /* ── Date header (showing Today/Tomorrow/etc) ── */
@@ -46,37 +86,35 @@
   font-variant-numeric: tabular-nums;
 }
 
-/* ── Subtle refresh button (hidden until hovered/tapped) ── */
+/* ── Refresh button (always visible on mobile) ── */
 .cal-refresh-btn {
   position: absolute;
   top: 0;
   right: 0;
   z-index: 10;
-  width: 32px;
-  height: 32px;
+  width: 44px;
+  height: 44px;
   display: flex;
   align-items: center;
   justify-content: center;
-  background: none;
+  background: rgba(255, 255, 255, 0.1);
   border: none;
   border-radius: var(--radius-full);
   cursor: pointer;
-  opacity: 0;
-  transition: opacity 0.3s ease, transform 0.3s ease;
+  opacity: 1;
+  transition: opacity 0.2s ease, transform 0.2s ease, background-color 0.2s ease;
   padding: 0;
   -webkit-tap-highlight-color: transparent;
 }
 
-.cal-refresh-btn:hover,
-.cal-refresh-btn:active {
+.cal-refresh-btn:hover {
+  background: rgba(255, 255, 255, 0.16);
   opacity: 1;
 }
 
-/* Tap target for mobile — slightly larger invisible area */
-.cal-refresh-btn::before {
-  content: '';
-  position: absolute;
-  inset: -8px;
+.cal-refresh-btn:active {
+  transform: scale(0.92);
+  background: rgba(255, 255, 255, 0.22);
 }
 
 .cal-refresh-spinning svg {
@@ -88,16 +126,18 @@
   to { transform: rotate(360deg); }
 }
 
-/* Show on panel hover (desktop) or panel touch (mobile stays hidden until area tapped) */
-.cal-info-side:hover .cal-refresh-btn {
-  opacity: 0.5;
-}
-
 /* ── Hero event (first/next event — large, bold, iPhone-style) ── */
 .cal-hero-event {
   display: flex;
   gap: 16px;
   align-items: stretch;
+}
+
+/* Reduce size on mobile for better fit */
+@media (max-width: 900px) {
+  .cal-hero-event {
+    gap: 12px;
+  }
 }
 
 .cal-hero-bar {
@@ -121,6 +161,12 @@
   font-variant-numeric: tabular-nums;
 }
 
+@media (max-width: 900px) {
+  .cal-hero-time {
+    font-size: 18px;
+  }
+}
+
 .cal-hero-title {
   font-size: 28px;
   font-weight: 700;
@@ -133,6 +179,13 @@
   -webkit-box-orient: vertical;
 }
 
+@media (max-width: 900px) {
+  .cal-hero-title {
+    font-size: 22px;
+    -webkit-line-clamp: 2;
+  }
+}
+
 .cal-hero-location {
   font-size: 18px;
   font-weight: 500;
@@ -142,6 +195,12 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+@media (max-width: 900px) {
+  .cal-hero-location {
+    font-size: 16px;
+  }
 }
 
 .cal-now-badge {
@@ -168,6 +227,12 @@
   display: flex;
   gap: 12px;
   align-items: stretch;
+}
+
+@media (max-width: 900px) {
+  .cal-secondary-item {
+    gap: 10px;
+  }
 }
 
 .cal-secondary-bar {
@@ -202,6 +267,13 @@
   max-width: 320px;
 }
 
+@media (max-width: 900px) {
+  .cal-secondary-name {
+    font-size: 16px;
+    max-width: unset;
+  }
+}
+
 .cal-secondary-location {
   font-size: 13px;
   font-weight: 500;
@@ -210,6 +282,13 @@
   text-overflow: ellipsis;
   white-space: nowrap;
   max-width: 280px;
+}
+
+@media (max-width: 900px) {
+  .cal-secondary-location {
+    font-size: 12px;
+    max-width: unset;
+  }
 }
 
 /* ── Empty / Unconfigured states ── */

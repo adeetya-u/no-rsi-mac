@@ -42,53 +42,25 @@ export default function App() {
   useEffect(() => {
     if (!isUnlocked || !scrollRef.current) return;
 
-    let hasMovedSinceObserve = false;
-
-    // Primary: IntersectionObserver for reliable tracking
-    const observer = new IntersectionObserver((entries) => {
-      // Only update if the panel is significantly visible (>50%)
-      const mostVisible = entries.reduce((best, entry) => {
-        return entry.intersectionRatio > best.intersectionRatio ? entry : best;
-      }, entries[0] || null);
-
-      if (mostVisible && mostVisible.intersectionRatio > 0.5) {
-        const index = PANELS.findIndex(p => p.id === mostVisible.target.id);
-        if (index !== -1 && hasMovedSinceObserve) {
-          setActiveIndex(index);
-          hasMovedSinceObserve = false;
-        }
-      }
-    }, {
-      root: scrollRef.current,
-      threshold: [0, 0.25, 0.5, 0.75, 1]
-    });
-
-    // Fallback: Scroll event listener for cases where IntersectionObserver fails
+    // Simple, reliable scroll tracking: directly calculate visible panel from scroll position
     const handleScroll = () => {
       if (!scrollRef.current) return;
+
       const scroll = scrollRef.current.scrollLeft;
       const panelWidth = scrollRef.current.offsetWidth;
+
+      // Find which panel is most visible (closest to center)
       const newIndex = Math.round(scroll / panelWidth);
       const clampedIndex = Math.max(0, Math.min(newIndex, PANELS.length - 1));
 
-      // Only update if substantially scrolled
       setActiveIndex(clampedIndex);
-      hasMovedSinceObserve = true;
     };
 
-    const panels = document.querySelectorAll('.standby-panel');
-    panels.forEach(p => observer.observe(p));
-
     scrollRef.current.addEventListener('scroll', handleScroll, { passive: true });
-    scrollRef.current.addEventListener('scrollend', () => {
-      hasMovedSinceObserve = false;
-    });
 
     return () => {
-      observer.disconnect();
       if (scrollRef.current) {
         scrollRef.current.removeEventListener('scroll', handleScroll);
-        scrollRef.current.removeEventListener('scrollend', () => {});
       }
     };
   }, [isUnlocked]);

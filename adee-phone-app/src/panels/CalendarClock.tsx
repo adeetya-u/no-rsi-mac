@@ -94,17 +94,11 @@ function parseICS(icsText: string, source: CalendarSource): CalendarEvent[] {
 function getEventsForDate(allEvents: CalendarEvent[], targetDate: Date): CalendarEvent[] {
   const dayStart = new Date(targetDate.getFullYear(), targetDate.getMonth(), targetDate.getDate());
   const dayEnd = new Date(targetDate.getFullYear(), targetDate.getMonth(), targetDate.getDate(), 23, 59, 59);
-  const now = new Date();
 
   const dayEvts = allEvents
     .filter(e => {
-      // Include event if it overlaps with the target date
-      const overlaps = e.start <= dayEnd && e.end >= dayStart;
-      // Filter out events that have already ended (unless they start today)
-      const notEnded = e.end >= now || (e.start.getDate() === now.getDate() &&
-                       e.start.getMonth() === now.getMonth() &&
-                       e.start.getFullYear() === now.getFullYear());
-      return overlaps && notEnded;
+      // Include event if it overlaps with the target date (started before day ends, ends after day starts)
+      return e.start <= dayEnd && e.end >= dayStart;
     })
     .sort((a, b) => {
       if (a.isAllDay && !b.isAllDay) return -1;
@@ -346,9 +340,8 @@ export default function CalendarClock() {
         }
       }
 
-      // Only keep future events (not ended)
-      const now = new Date();
-      setAllEvents(events.filter(e => e.end >= now));
+      // Keep all events including ongoing ones; display logic handles filtering per-date
+      setAllEvents(events);
     } catch (e) {
       console.error('Calendar fetch error:', e);
     }
