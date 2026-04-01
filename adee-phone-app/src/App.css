@@ -30,39 +30,6 @@
   overflow: hidden;
 }
 
-/* Dot indicators */
-.standby-dots {
-  position: fixed;
-  bottom: 12px;
-  left: 50%;
-  transform: translateX(-50%);
-  display: flex;
-  gap: 6px;
-  align-items: center;
-  z-index: 100;
-  padding: 6px 12px;
-  border-radius: var(--radius-full);
-  background: rgba(255, 255, 255, 0.06);
-  backdrop-filter: blur(20px);
-  -webkit-backdrop-filter: blur(20px);
-}
-
-/* Subtle edge glow during swipe */
-.edge-glow {
-  position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  pointer-events: none;
-  z-index: 50;
-  background: radial-gradient(
-    ellipse at center,
-    transparent 60%,
-    rgba(255, 255, 255, 0.03) 100%
-  );
-}
-
 /* ── Passcode Lock Screen ── */
 .passcode-overlay {
   position: absolute;

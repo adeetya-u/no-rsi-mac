@@ -15,8 +15,6 @@ const PANELS = [
 
 export default function App() {
   const scrollRef = useRef<HTMLDivElement>(null);
-  const [activeIndex, setActiveIndex] = useState(0);
-  const [isTransitioning, setIsTransitioning] = useState(false);
   const [isUnlocked, setIsUnlocked] = useState(false);
   const [pinInput, setPinInput] = useState('');
   const [isPinError] = useState(false); // Kept for UI class binding
@@ -69,39 +67,6 @@ export default function App() {
       }
     }
   };
-
-  useEffect(() => {
-    if (!isUnlocked || !scrollRef.current) return;
-
-    // Simple, reliable scroll tracking: directly calculate visible panel from scroll position
-    const handleScroll = () => {
-      if (!scrollRef.current) return;
-
-      const scroll = scrollRef.current.scrollLeft;
-      const panelWidth = scrollRef.current.offsetWidth;
-
-      // Find which panel is most visible (closest to center)
-      const newIndex = Math.round(scroll / panelWidth);
-      const clampedIndex = Math.max(0, Math.min(newIndex, PANELS.length - 1));
-
-      setActiveIndex(clampedIndex);
-    };
-
-    scrollRef.current.addEventListener('scroll', handleScroll, { passive: true });
-
-    return () => {
-      if (scrollRef.current) {
-        scrollRef.current.removeEventListener('scroll', handleScroll);
-      }
-    };
-  }, [isUnlocked]);
-
-  useEffect(() => {
-    if (!isUnlocked) return;
-    setIsTransitioning(true);
-    const t = setTimeout(() => setIsTransitioning(false), 400);
-    return () => clearTimeout(t);
-  }, [activeIndex, isUnlocked]);
 
   return (
     <div className="standby-root">
@@ -163,23 +128,6 @@ export default function App() {
               ))}
             </div>
 
-            <div className="standby-dots">
-              {PANELS.map((p, i) => (
-                <motion.div
-                  key={p.id}
-                  className="dot-indicator"
-                  layout
-                  animate={{
-                    width: i === activeIndex ? 20 : 6,
-                    backgroundColor: i === activeIndex
-                      ? 'rgba(255, 255, 255, 1)'
-                      : 'rgba(255, 255, 255, 0.2)',
-                  }}
-                  transition={{ type: 'spring', stiffness: 300, damping: 30 }}
-                />
-              ))}
-            </div>
-
             {/* Install PWA button */}
             {showInstallButton && (
               <motion.button
@@ -197,19 +145,6 @@ export default function App() {
                 <span>Install</span>
               </motion.button>
             )}
-
-            {/* Subtle edge glow for active transition */}
-            <AnimatePresence>
-              {isTransitioning && (
-                <motion.div
-                  className="edge-glow"
-                  initial={{ opacity: 0 }}
-                  animate={{ opacity: 0.15 }}
-                  exit={{ opacity: 0 }}
-                  transition={{ duration: 0.3 }}
-                />
-              )}
-            </AnimatePresence>
           </motion.div>
         )}
       </AnimatePresence>
