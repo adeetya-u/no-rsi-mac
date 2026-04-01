@@ -94,11 +94,22 @@ function parseICS(icsText: string, source: CalendarSource): CalendarEvent[] {
 function getEventsForDate(allEvents: CalendarEvent[], targetDate: Date): CalendarEvent[] {
   const dayStart = new Date(targetDate.getFullYear(), targetDate.getMonth(), targetDate.getDate());
   const dayEnd = new Date(targetDate.getFullYear(), targetDate.getMonth(), targetDate.getDate(), 23, 59, 59);
+  const now = new Date();
+
+  // Check if targetDate is today
+  const isToday = targetDate.toDateString() === now.toDateString();
 
   const dayEvts = allEvents
     .filter(e => {
-      // Include event if it overlaps with the target date (started before day ends, ends after day starts)
-      return e.start <= dayEnd && e.end >= dayStart;
+      // Include event if it overlaps with the target date
+      const overlaps = e.start <= dayEnd && e.end >= dayStart;
+
+      // If viewing today, filter out events that have already ended
+      if (isToday) {
+        return overlaps && e.end >= now;
+      }
+
+      return overlaps;
     })
     .sort((a, b) => {
       if (a.isAllDay && !b.isAllDay) return -1;
@@ -313,7 +324,7 @@ export default function CalendarClock() {
   const configured = true;
 
   useEffect(() => {
-    const interval = setInterval(() => setNow(new Date()), 30_000);
+    const interval = setInterval(() => setNow(new Date()), 5_000);
     return () => clearInterval(interval);
   }, []);
 
